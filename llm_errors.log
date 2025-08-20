@@ -1,0 +1,4 @@
+2025-08-20 17:47:02,681 | ERROR | Invalid columns in SQL: ['dbo', 'SalesPlanTable', 'Apr', 'LEFT', 'dbo', 'SalesPlanTable', 'Apr', 'LEFT']
+2025-08-20 18:20:22,301 | WARNING | Added missing GROUP BY: (CASE WHEN [MMMMYY] = 'APR25' THEN Amount ELSE 0 END)
+2025-08-20 18:20:22,303 | ERROR | Invalid columns: ['CASE', 'WHEN', 'APR25', 'THEN', 'ELSE', 'END', 'Total_APR25', 'CASE', 'WHEN', 'APR24', 'THEN', 'ELSE', 'END', 'Total_APR24', 'dbo', 'SalesPlanTable', 'APR25', 'APR24', 'Apr', 'CASE', 'WHEN', 'APR25', 'THEN', 'ELSE', 'END']
+2025-08-20 18:22:04,905 | ERROR | Invalid columns: ['CASE', 'WHEN', 'APR25', 'THEN', 'ELSE', 'END', 'Total_APR25', 'CASE', 'WHEN', 'APR24', 'THEN', 'ELSE', 'END', 'Total_APR24', 'dbo', 'SalesPlanTable', 'APR25', 'APR24', 'Apr']

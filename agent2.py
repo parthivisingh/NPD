@@ -5,6 +5,7 @@ import requests
 from dotenv import load_dotenv
 
 from intent_router import generate_sql as generate_sql_template
+from sql_guard import SQLGuard
 
 load_dotenv()
 
@@ -73,6 +74,8 @@ def fetch_schema_text(conn, include_schemas=("dbo",), limit_tables=50) -> str:
     # Add hint for LLM
     lines.append("")
     lines.append("-- Note: OrderFY is VARCHAR(10) containing year like '2023'. Use CAST(OrderFY AS INT) to treat as number.")
+    lines.append("-- Note: [MMMMYY] = 'APR25', 'JUL25' — use for month-year filtering")
+    lines.append("-- Do NOT use [MMMYY] — it does not exist.")
     return "\n".join(lines)
 
 def get_column_mapping(conn):
@@ -150,81 +153,6 @@ def generate_sql(question: str, schema_text: str) -> str:
     except Exception as e:
         raise RuntimeError(f"Failed to generate SQL: {e}")
 
-# ---------------- SQL REWRITE & CORRECTION ----------------
-def rewrite_sql(sql: str) -> str:
-    # --- Fix 1: Handle TOP correctly ---
-    top_match = re.search(r"SELECT\s+TOP\s+\d+", sql, re.IGNORECASE)
-    if top_match:
-        # Keep the existing TOP N
-        pass  # Do nothing — preserve original
-    else:
-        # No TOP found → add TOP 100
-        sql = re.sub(r"^SELECT\b", "SELECT TOP 100", sql, flags=re.IGNORECASE)
-
-    # --- Fix 2: Normalize OrderFY handling ---
-    if "OrderFY" in sql:
-        # Replace any CAST(... AS INT) on OrderFY with LEFT(OrderFY, 4)
-        sql = re.sub(
-            r"CAST\s*\(\s*[^)]*?OrderFY[^)]*?AS\s+INT\s*\)",
-            r"CAST(LEFT(OrderFY, 4) AS INT)",
-            sql,
-            flags=re.IGNORECASE
-        )
-
-    # --- Fix 3: Fix WHERE conditions like "OrderFY >= 2025" ---
-    # Since OrderFY is VARCHAR, comparing as INT won't work for '2025-26'
-    # We should use LEFT(OrderFY, 4) = '2025' or similar
-    if "OrderFY" in sql and "WHERE" in sql.upper():
-        # Look for patterns like CAST(...OrderFY...) >= 2025
-        where_pattern = r"CAST\s*\(\s*[^)]*?OrderFY[^)]*?AS\s+INT\s*\)\s*(>=|<=|=|>|<)\s*(['\"]?)(20\d{2})\2"
-        matches = re.finditer(where_pattern, sql, re.IGNORECASE)
-        for match in reversed(list(matches)):
-            op = match.group(1)
-            year = match.group(3)
-            # Replace with LEFT(OrderFY, 4) = '2025'
-            replacement = f"LEFT(OrderFY, 4) {op} '{year}'"
-            sql = sql[:match.start()] + replacement + sql[match.end():]
-
-    # --- Fix 4: Add GROUP BY if missing ---
-    # --- Fix 4: Add GROUP BY if missing and using aggregation ---
-    has_aggregation = bool(re.search(r"\bSUM\(|\bCOUNT\(|\bAVG\(|\bMIN\(|\bMAX\(", sql, re.IGNORECASE))
-    has_group_by = "GROUP BY" in sql.upper()
-
-    if has_aggregation and not has_group_by:
-        # Look for any non-aggregated expressions in SELECT
-        # Example: CAST(LEFT(OrderFY, 4) AS INT)
-        select_match = re.search(r"SELECT\s+.*?FROM", sql, re.IGNORECASE | re.DOTALL)
-        if select_match:
-            select_part = select_match.group(0)
-            # Find expressions that are not in aggregates
-            group_cols = []
-
-            # Extract non-aggregated expressions
-            for expr in re.finditer(r"CAST\(LEFT\(OrderFY,\s*4\)\s+AS\s+INT\)", select_part, re.IGNORECASE):
-                group_cols.append("CAST(LEFT(OrderFY, 4) AS INT)")
-            for expr in re.finditer(r"LEFT\(OrderFY,\s*4\)", select_part, re.IGNORECASE):
-                if "CAST" not in expr.group(0):
-                    group_cols.append("LEFT(OrderFY, 4)")
-            for expr in re.finditer(r"\bOrderFY\b", select_part, re.IGNORECASE):
-                group_cols.append("[OrderFY]")
-
-            # Remove duplicates
-            group_cols = list(dict.fromkeys(group_cols))
-
-            if group_cols:
-                group_by_clause = f"\nGROUP BY {', '.join(group_cols)}"
-                if "ORDER BY" in sql.upper():
-                    sql = re.sub(r"\s+ORDER BY", group_by_clause + "\nORDER BY", sql, flags=re.IGNORECASE)
-                else:
-                    sql += group_by_clause
-
-    # --- Fix 5: Clean up double brackets ---
-    sql = re.sub(r"\[\[([^\]]+)\]\]", r"[\1]", sql)  # [[Amount]] → [Amount]
-    sql = re.sub(r"\[\[([^\]]+)\]", r"[\1]", sql)
-    sql = re.sub(r"\[([^\]]+)\]\]", r"[\1]", sql)
-
-    return sql.strip()
-
 
 # ---------------- SAFETY CHECK ----------------
 WRITE_KEYWORDS = ("insert", "update", "delete", "alter", "drop", "truncate", "create", "merge", "exec")
@@ -267,38 +195,56 @@ def main():
         return
     print("[*] Connected.")
 
-    print("[*] Reading schema and building column map…")
+    # Initialize SQLGuard
+    try:
+        guard = SQLGuard(conn)
+        print("[*] SQLGuard initialized. Column resolver ready.")
+    except Exception as e:
+        print(f"[ERROR] Failed to initialize SQLGuard: {e}")
+        return
+
+    print("[*] Reading schema…")
     try:
         schema_text = fetch_schema_text(conn)
-        column_fuzzy_map = get_column_mapping(conn)
     except Exception as e:
         print(f"[ERROR] Schema fetch failed: {e}")
         return
     print("[*] Schema ready.")
-
+    #
     while True:
-        q = input("\nAsk about your data (or 'exit'): ").strip()
-        if q.lower() in ("exit", "quit"):
-            break
-
         try:
+            q = input("\nAsk about your data (or 'exit'): ").strip()
+            if q.lower() in ("exit", "quit"):
+                break
+            if not q:
+                continue
+
             # Step 1: Try template-based SQL
             sql = generate_sql_template(q, schema_text)
 
-            # Step 2: If no template, fall back to LLM
             if sql is None:
                 print("No template matched. Using LLM...")
-                sql = generate_sql(q, schema_text)  # Your existing LLM call
-                sql = rewrite_sql(sql)
+                raw_sql = generate_sql(q, schema_text)
+                sql = guard.repair_sql(raw_sql)
+                print("\n--- Raw Generated SQL ---")
+                print(raw_sql)
             else:
                 print("\n--- Using Template-Based SQL ---")
+                print(sql)
 
-            print("\n--- Generated SQL ---\n", sql)
+            print("\n--- Repaired SQL ---")
+            print(sql)
+
+            # Step 2: Validate
+            if not guard.validate_sql(sql):
+                print("\n[!] Invalid SQL logic or column names. Refusing to run.")
+                continue
 
             if not is_safe_sql(sql):
                 print("\n[!] Refusing to run unsafe SQL.")
                 continue
 
+            # Step 3: Execute
             cols, rows = execute_sql(conn, sql)
             print("\n--- Results ---")
             print("\t".join(cols))

@@ -49,22 +49,19 @@ def resolve_month_year(my_hint: str) -> str:
     return my_hint.strip().title()
 
 def extract_filters(question: str) -> Dict[str, str]:
-    """
-    Extract common filters: MFGMode, Customer_Name, monthyear, etc.
-    """
     filters = {}
 
-    # MFGMode: "mfg is production"
-    #mfg_match = re.search(r"mfg\s+is\s+([a-zA-Z\s]+?)(?:\s+and|\s+as|\s*$)", question, re.I)
-    mfg_match = re.search(r"mfg\s+is\s+([\w-]+)", question, re.I)
+    # Only extract filters if not a "compare month year" query
+    if re.search(r"compare.*?month\s+year", question, re.I):
+        return {}  # Skip filters — handled by template
 
+    # MFGMode: "mfg is production"
+    mfg_match = re.search(r"mfg\s+is\s+([\w-]+)", question, re.I)
     if mfg_match:
         filters["MFGMode"] = mfg_match.group(1).strip().title()
 
     # Customer_Name: "customer is ELTA SYSTEMS LTD"
-    #cust_match = re.search(r"customer\s+is\s+([A-Z\s]+?)(?:\s+and|\s+as|\s*$)", question, re.I)
     cust_match = re.search(r"customer\s+is\s+([\w\s.&-]+?)(?:\s+and|\s+as|\s*$)", question, re.I)
-
     if cust_match:
         filters["Customer_Name"] = cust_match.group(1).strip()
 
@@ -75,13 +72,13 @@ def extract_filters(question: str) -> Dict[str, str]:
 
     # monthyear: "in apr-24" or "apr-24"
     my_match = re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)-(\d{2})\b", question, re.I)
-    if my_match:
+    if my_match and not re.search(r"compare.*?month\s+year", question, re.I):
         mon, yr = my_match.groups()
         filters["monthyear"] = f"{mon.title()}-{yr}"
 
     # MonthName: "month is April"
     mn_match = re.search(r"month\s+is\s+(\w+)", question, re.I)
-    if mn_match:
+    if mn_match and not re.search(r"compare.*?month\s+year", question, re.I):
         filters["MonthName"] = mn_match.group(1).strip().title()
 
     return filters
@@ -120,6 +117,7 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
         fy1_raw, fy2_raw = match.groups()
         fy1 = fy1_raw.strip().strip("'\"")
         fy2 = fy2_raw.strip().strip("'\"")
+
 
         # Validate format
         if not re.match(r"20\d{2}-\d{2}", fy1) or not re.match(r"20\d{2}-\d{2}", fy2):
@@ -345,3 +343,22 @@ ORDER BY Count_{thing_col} DESC
     {where_sql}
     ORDER BY TRY_CONVERT(DATE, [OrderDate]) DESC
     """
+    
+    # -------------------------------------------------
+    # Template 9: Compare Amount in month year apr-25 and apr-24
+    # Uses [MMMMYY] = 'APR25', 'APR24'
+    # -------------------------------------------------
+    match = re.search(r"compare\s+amount\s+in\s+month\s+year\s+(\w+)-(\d{2})\s+and\s+(\w+)-(\d{2})", q, re.I)
+    if match:
+        mon1, yr1, mon2, yr2 = match.groups()
+        code1 = f"{mon1.strip()[:3].upper()}{yr1}"  # 'apr-25' → 'APR25'
+        code2 = f"{mon2.strip()[:3].upper()}{yr2}"
+        where_sql = f" WHERE [MMMMYY] IN ('{code1}', '{code2}')"
+
+        return f"""
+SELECT
+    SUM(CASE WHEN [MMMMYY] = '{code1}' THEN Amount ELSE 0 END) AS Total_{code1},
+    SUM(CASE WHEN [MMMMYY] = '{code2}' THEN Amount ELSE 0 END) AS Total_{code2}
+FROM dbo.SalesPlanTable
+{where_sql}
+"""
