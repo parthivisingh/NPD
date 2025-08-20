@@ -105,7 +105,6 @@ Return ONLY a valid T-SQL SELECT statement based on the user's question and the 
 Rules:
 - Read-only: do not modify data (no INSERT/UPDATE/DELETE/ALTER/DROP/TRUNCATE/CREATE).
 - Use fully qualified names (schema.table).
-- Include TOP 100 by default if result might be large.
 - Use ONLY the exact column names from the schema. NEVER invent or modify column names.
 - NEVER use a column that is not listed in the schema.
 - Example: If schema shows [OrderFY], do not use [Ord_FY], [FY], or [OrderYear].
@@ -126,6 +125,14 @@ Rules:
 - When the user says "compare", return aggregated values (SUM, COUNT) for each group.
 - Do not return raw rows unless asked for "list" or "show rows".
 - Example: "Compare sales in 2023 vs 2024" → use GROUP BY or PIVOT to show totals per year.
+- When asked to "compute growth" between two fiscal years, return:
+  - SUM for the first year
+  - SUM for the second year
+  - Absolute growth (difference)
+  - Percentage growth: (new - old)/old * 100
+- Use CASE WHEN OrderFY = '2024-25' THEN Amount ... END pattern.
+- Do not use window functions like OVER() for simple year-over-year growth.
+- Use the exact OrderFY values (e.g., '2024-25'), not CAST to INT.
 """
 
 def generate_sql(question: str, schema_text: str) -> str:
