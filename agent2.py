@@ -122,44 +122,30 @@ Rules:
 """
 
 def generate_sql(question: str, schema_text: str) -> str:
-    """Call Ollama to generate SQL from natural language."""
-    prompt = f"""{SYSTEM_PROMPT}
-
-SCHEMA:
-{schema_text}
-
-QUESTION:
-{question}
-
-SQL:"""
-    payload = {
-        "model": LLAMA_MODEL,
-        "prompt": prompt,
-        "stream": False
-    }
+    """Call Fireworks (or other OpenAI-compatible LLM) to generate SQL from natural language."""
     try:
-        # r = requests.post(f"{OLLAMA_URL}/api/generate", json=payload, timeout=500)
-        headers = {}
+        headers = {"Content-Type": "application/json"}
         if LLM_API_KEY:
             headers["Authorization"] = f"Bearer {LLM_API_KEY}"
 
         r = requests.post(
-            f"{OLLAMA_URL}/chat/completions",   # <-- note change here
+            f"{LLM_URL}/chat/completions",
             json={
-                "model": LLAMA_MODEL,
+                "model": LLM_MODEL,
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": f"{schema_text}\n\n{question}"}
+                    {"role": "user", "content": f"SCHEMA:\n{schema_text}\n\nQUESTION:\n{question}\n\nSQL:"}
                 ],
                 "stream": False
             },
             headers=headers,
             timeout=500
         )
-
-
         r.raise_for_status()
-        raw = r.json().get("response", "").strip()
+
+        data = r.json()
+        # Fireworks is OpenAI-compatible: result is in choices[0].message.content
+        raw = data["choices"][0]["message"]["content"].strip()
 
         # Extract SQL from code blocks
         if "```sql" in raw:
