@@ -119,6 +119,13 @@ Rules:
 - Do not add explanations. Only output the SQL query.
 - If OrderFY contains values like '2024-25', extract the first year using LEFT(OrderFY, 4), then CAST to INT.
 - Do not use CAST(OrderFY AS INT) directly — it will fail.
+- If MonthName contains month names like 'January', 'April', do NOT use CAST(MonthName AS INT).
+- To filter for April to June, use: MonthName IN ('April', 'May', 'June').
+- Do not assume numeric values unless the schema says so.
+- If filtering by numeric month, use columns like Order_Month_Number or document_Month_Number, not MonthName.
+- When the user says "compare", return aggregated values (SUM, COUNT) for each group.
+- Do not return raw rows unless asked for "list" or "show rows".
+- Example: "Compare sales in 2023 vs 2024" → use GROUP BY or PIVOT to show totals per year.
 """
 
 def generate_sql(question: str, schema_text: str) -> str:
@@ -195,27 +202,37 @@ def rewrite_sql(sql: str) -> str:
             sql = sql[:match.start()] + replacement + sql[match.end():]
 
     # --- Fix 4: Add GROUP BY if missing ---
+    # --- Fix 4: Add GROUP BY if missing and using aggregation ---
     has_aggregation = bool(re.search(r"\bSUM\(|\bCOUNT\(|\bAVG\(|\bMIN\(|\bMAX\(", sql, re.IGNORECASE))
     has_group_by = "GROUP BY" in sql.upper()
 
     if has_aggregation and not has_group_by:
-        if "LEFT(OrderFY, 4)" in sql or "OrderFY" in sql:
-            match = re.search(r"LEFT\s*\(\s*OrderFY\s*,\s*4\s*\)", sql, re.IGNORECASE)
-            if match:
-                sql = re.sub(
-                    r"\s+ORDER BY",
-                    "\nGROUP BY [dbo].[SalesPlanTable].[CustomerCode], LEFT(OrderFY, 4)\nORDER BY",
-                    sql,
-                    flags=re.IGNORECASE
-                )
-            else:
-                # Simple case: group by customer only
-                sql = re.sub(
-                    r"\s+ORDER BY",
-                    "\nGROUP BY [dbo].[SalesPlanTable].[CustomerCode]\nORDER BY",
-                    sql,
-                    flags=re.IGNORECASE
-                )
+        # Look for any non-aggregated expressions in SELECT
+        # Example: CAST(LEFT(OrderFY, 4) AS INT)
+        select_match = re.search(r"SELECT\s+.*?FROM", sql, re.IGNORECASE | re.DOTALL)
+        if select_match:
+            select_part = select_match.group(0)
+            # Find expressions that are not in aggregates
+            group_cols = []
+
+            # Extract non-aggregated expressions
+            for expr in re.finditer(r"CAST\(LEFT\(OrderFY,\s*4\)\s+AS\s+INT\)", select_part, re.IGNORECASE):
+                group_cols.append("CAST(LEFT(OrderFY, 4) AS INT)")
+            for expr in re.finditer(r"LEFT\(OrderFY,\s*4\)", select_part, re.IGNORECASE):
+                if "CAST" not in expr.group(0):
+                    group_cols.append("LEFT(OrderFY, 4)")
+            for expr in re.finditer(r"\bOrderFY\b", select_part, re.IGNORECASE):
+                group_cols.append("[OrderFY]")
+
+            # Remove duplicates
+            group_cols = list(dict.fromkeys(group_cols))
+
+            if group_cols:
+                group_by_clause = f"\nGROUP BY {', '.join(group_cols)}"
+                if "ORDER BY" in sql.upper():
+                    sql = re.sub(r"\s+ORDER BY", group_by_clause + "\nORDER BY", sql, flags=re.IGNORECASE)
+                else:
+                    sql += group_by_clause
 
     # --- Fix 5: Clean up double brackets ---
     sql = re.sub(r"\[\[([^\]]+)\]\]", r"[\1]", sql)  # [[Amount]] → [Amount]
@@ -224,27 +241,6 @@ def rewrite_sql(sql: str) -> str:
 
     return sql.strip()
 
-def correct_columns(sql: str, fuzzy_map: dict) -> str:
-    """Correct common misspelled column names using fuzzy mapping."""
-    # Find unbracketed or bracketed column-like tokens
-    tokens = re.finditer(r"\b[\[\]a-zA-Z0-9_]+\b", sql)
-    for match in reversed(list(tokens)):
-        token = match.group(0)
-        # Skip SQL keywords
-        if token.upper() in {
-            "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "TOP", "AS",
-            "SUM", "COUNT", "AVG", "MIN", "MAX", "CAST", "INT", "INTO", "EXEC"
-        }:
-            continue
-        # Clean token for matching
-        clean = token.strip("[]").replace("_", "").replace(" ", "").lower()
-        if clean in fuzzy_map:
-            replacement = f"[{fuzzy_map[clean]}]"
-            # Replace only this instance
-            start = match.start()
-            end = match.end()
-            sql = sql[:start] + replacement + sql[end:]
-    return sql
 
 # ---------------- SAFETY CHECK ----------------
 WRITE_KEYWORDS = ("insert", "update", "delete", "alter", "drop", "truncate", "create", "merge", "exec")
@@ -313,7 +309,6 @@ def main():
             sql = rewrite_sql(sql)
 
             # Step 3: Correct column names (e.g., Ord_FY → OrderFY)
-            sql = correct_columns(sql, column_fuzzy_map)
             print("\n--- Final Corrected SQL ---")
             print(sql)
 
