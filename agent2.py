@@ -15,7 +15,8 @@ SQL_PWD      = os.getenv("SQL_PWD", "")
 SQL_DRIVER   = os.getenv("SQL_DRIVER", "ODBC Driver 17 for SQL Server")
 
 OLLAMA_URL   = os.getenv("OLLAMA_URL", "http://192.168.1.7:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3:8b")
+# OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3:8b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral:7b-instruct")
 
 # ---------------- DB CONNECTION ----------------
 def build_conn_str() -> str:
@@ -153,46 +154,59 @@ SQL:"""
 
 # ---------------- SQL REWRITE & CORRECTION ----------------
 def rewrite_sql(sql: str) -> str:
-    """Fix common LLM-generated errors including missing GROUP BY."""
-    # Fix 1: Move TOP 100 to right after SELECT
-    if "TOP 100" in sql.upper():
-        sql = re.sub(r"\s+TOP\s+100", "", sql, flags=re.IGNORECASE)
-        sql = re.sub(r"^SELECT\b", "SELECT TOP 100", sql, flags=re.IGNORECASE)
+    # Fix 1: Ensure TOP 100 is in correct place
+    sql = re.sub(r"\s+TOP\s+100", "", sql, flags=re.IGNORECASE)
+    sql = re.sub(r"^SELECT\b", "SELECT TOP 100", sql, flags=re.IGNORECASE)
 
-    # Fix 2: Replace CAST(OrderFY AS INT) → CAST(LEFT(OrderFY, 4) AS INT)
-    cast_fy_pattern = r"CAST\s*\(\s*[^)]*?OrderFY[^)]*?AS\s+INT\s*\)"
-    if re.search(cast_fy_pattern, sql, re.IGNORECASE):
+    # Fix 2: Replace any CAST(OrderFY AS INT) or SUBSTRING with consistent LEFT
+    # Normalize all to LEFT(OrderFY, 4) for simplicity
+    if "OrderFY" in sql:
+        # Replace various forms with standard LEFT
         sql = re.sub(
-            cast_fy_pattern,
+            r"CAST\s*\(\s*SUBSTRING\s*\(\s*OrderFY\s*,\s*1\s*,\s*4\s*\)\s*AS\s+INT\s*\)",
+            r"CAST(LEFT(OrderFY, 4) AS INT)",
+            sql,
+            flags=re.IGNORECASE
+        )
+        sql = re.sub(
+            r"CAST\s*\(\s*OrderFY\s+AS\s+INT\s*\)",
             r"CAST(LEFT(OrderFY, 4) AS INT)",
             sql,
             flags=re.IGNORECASE
         )
 
-    # Fix 3: Replace YEAR(OrderFY) → LEFT(OrderFY, 4)
-    sql = re.sub(
-        r"\bYEAR\s*\(\s*[^)]*?OrderFY[^)]*\)",
-        r"LEFT(OrderFY, 4)",
-        sql,
-        flags=re.IGNORECASE
-    )
+    # Fix 3: Add GROUP BY if aggregation is used and GROUP BY is missing
+    has_aggregation = bool(re.search(r"\bSUM\(|\bCOUNT\(|\bAVG\(|\bMIN\(|\bMAX\(", sql, re.IGNORECASE))
+    has_group_by = "GROUP BY" in sql.upper()
 
-    # Fix 4: Clean up backticks
-    sql = sql.replace("`", "")
+    if has_aggregation and not has_group_by:
+        # Look for the grouped expression in SELECT
+        match = re.search(r"CAST\(LEFT\(OrderFY,\s*4\)\s+AS\s+INT\)", sql, re.IGNORECASE)
+        if match:
+            expr = "CAST(LEFT(OrderFY, 4) AS INT)"
+            if "ORDER BY" in sql.upper():
+                # Insert before ORDER BY
+                sql = re.sub(
+                    r"\s+ORDER BY",
+                    f"\nGROUP BY {expr}\nORDER BY",
+                    sql,
+                    flags=re.IGNORECASE
+                )
+            else:
+                sql += f"\nGROUP BY {expr}"
 
-    # Fix 5: Add GROUP BY if aggregation is used but GROUP BY is missing
-    if re.search(r"\bSUM\(|\bCOUNT\(|\bAVG\(|\bMIN\(|\bMAX\(", sql, re.IGNORECASE):
-        if "GROUP BY" not in sql.upper():
-            # Look for the grouped expression: assume it's the first non-aggregate column
-            match = re.search(r"CAST\(LEFT\(OrderFY, 4\) AS INT\) AS? (\w+)", sql, re.IGNORECASE)
-            if match:
-                expr = "CAST(LEFT(OrderFY, 4) AS INT)"
-                if "ORDER BY" in sql.upper():
-                    sql = re.sub(r"\s+ORDER BY", f"\nGROUP BY {expr}\nORDER BY", sql, flags=re.IGNORECASE)
-                else:
-                    sql += f"\nGROUP BY {expr}"
-    
-    # Final cleanup
+    # Fix 4: Add ORDER BY if not present (optional, improves UX)
+    if has_aggregation and "ORDER BY" not in sql.upper():
+        if "FY" in sql:
+            sql += "\nORDER BY FY"
+        elif "CAST(LEFT(OrderFY, 4) AS INT)" in sql:
+            sql += "\nORDER BY CAST(LEFT(OrderFY, 4) AS INT)"
+
+    # Fix 5: Clean up double brackets
+    sql = re.sub(r"\[\[([^\]]+)\]\]", r"[\1]", sql)  # [[Amount]] → [Amount]
+    sql = re.sub(r"\[\[([^\]]+)\]", r"[\1]", sql)
+    sql = re.sub(r"\[([^\]]+)\]\]", r"[\1]", sql)
+
     return sql.strip()
 
 def correct_columns(sql: str, fuzzy_map: dict) -> str:
