@@ -14,9 +14,11 @@ SQL_UID      = os.getenv("SQL_UID", "")
 SQL_PWD      = os.getenv("SQL_PWD", "")
 SQL_DRIVER   = os.getenv("SQL_DRIVER", "ODBC Driver 17 for SQL Server")
 
-OLLAMA_URL   = os.getenv("OLLAMA_URL", "http://192.168.1.7:11434")
-# OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3:8b")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral:7b-instruct")
+# --- LLM (Fireworks or Ollama) ---
+LLM_URL      = os.getenv("LLM_URL", "https://api.fireworks.ai/inference/v1")
+LLM_MODEL    = os.getenv("LLM_MODEL", "accounts/fireworks/models/llama-v3p1-8b-instruct")
+LLM_API_KEY  = os.getenv("LLM_API_KEY", "")
+
 
 # ---------------- DB CONNECTION ----------------
 def build_conn_str() -> str:
@@ -131,12 +133,31 @@ QUESTION:
 
 SQL:"""
     payload = {
-        "model": OLLAMA_MODEL,
+        "model": LLAMA_MODEL,
         "prompt": prompt,
         "stream": False
     }
     try:
-        r = requests.post(f"{OLLAMA_URL}/api/generate", json=payload, timeout=500)
+        # r = requests.post(f"{OLLAMA_URL}/api/generate", json=payload, timeout=500)
+        headers = {}
+        if LLM_API_KEY:
+            headers["Authorization"] = f"Bearer {LLM_API_KEY}"
+
+        r = requests.post(
+            f"{OLLAMA_URL}/chat/completions",   # <-- note change here
+            json={
+                "model": LLAMA_MODEL,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": f"{schema_text}\n\n{question}"}
+                ],
+                "stream": False
+            },
+            headers=headers,
+            timeout=500
+        )
+
+
         r.raise_for_status()
         raw = r.json().get("response", "").strip()
 
@@ -154,55 +175,63 @@ SQL:"""
 
 # ---------------- SQL REWRITE & CORRECTION ----------------
 def rewrite_sql(sql: str) -> str:
-    # Fix 1: Ensure TOP 100 is in correct place
-    sql = re.sub(r"\s+TOP\s+100", "", sql, flags=re.IGNORECASE)
-    sql = re.sub(r"^SELECT\b", "SELECT TOP 100", sql, flags=re.IGNORECASE)
+    # --- Fix 1: Handle TOP correctly ---
+    top_match = re.search(r"SELECT\s+TOP\s+\d+", sql, re.IGNORECASE)
+    if top_match:
+        # Keep the existing TOP N
+        pass  # Do nothing — preserve original
+    else:
+        # No TOP found → add TOP 100
+        sql = re.sub(r"^SELECT\b", "SELECT TOP 100", sql, flags=re.IGNORECASE)
 
-    # Fix 2: Replace any CAST(OrderFY AS INT) or SUBSTRING with consistent LEFT
-    # Normalize all to LEFT(OrderFY, 4) for simplicity
+    # --- Fix 2: Normalize OrderFY handling ---
     if "OrderFY" in sql:
-        # Replace various forms with standard LEFT
+        # Replace any CAST(... AS INT) on OrderFY with LEFT(OrderFY, 4)
         sql = re.sub(
-            r"CAST\s*\(\s*SUBSTRING\s*\(\s*OrderFY\s*,\s*1\s*,\s*4\s*\)\s*AS\s+INT\s*\)",
-            r"CAST(LEFT(OrderFY, 4) AS INT)",
-            sql,
-            flags=re.IGNORECASE
-        )
-        sql = re.sub(
-            r"CAST\s*\(\s*OrderFY\s+AS\s+INT\s*\)",
+            r"CAST\s*\(\s*[^)]*?OrderFY[^)]*?AS\s+INT\s*\)",
             r"CAST(LEFT(OrderFY, 4) AS INT)",
             sql,
             flags=re.IGNORECASE
         )
 
-    # Fix 3: Add GROUP BY if aggregation is used and GROUP BY is missing
+    # --- Fix 3: Fix WHERE conditions like "OrderFY >= 2025" ---
+    # Since OrderFY is VARCHAR, comparing as INT won't work for '2025-26'
+    # We should use LEFT(OrderFY, 4) = '2025' or similar
+    if "OrderFY" in sql and "WHERE" in sql.upper():
+        # Look for patterns like CAST(...OrderFY...) >= 2025
+        where_pattern = r"CAST\s*\(\s*[^)]*?OrderFY[^)]*?AS\s+INT\s*\)\s*(>=|<=|=|>|<)\s*(['\"]?)(20\d{2})\2"
+        matches = re.finditer(where_pattern, sql, re.IGNORECASE)
+        for match in reversed(list(matches)):
+            op = match.group(1)
+            year = match.group(3)
+            # Replace with LEFT(OrderFY, 4) = '2025'
+            replacement = f"LEFT(OrderFY, 4) {op} '{year}'"
+            sql = sql[:match.start()] + replacement + sql[match.end():]
+
+    # --- Fix 4: Add GROUP BY if missing ---
     has_aggregation = bool(re.search(r"\bSUM\(|\bCOUNT\(|\bAVG\(|\bMIN\(|\bMAX\(", sql, re.IGNORECASE))
     has_group_by = "GROUP BY" in sql.upper()
 
     if has_aggregation and not has_group_by:
-        # Look for the grouped expression in SELECT
-        match = re.search(r"CAST\(LEFT\(OrderFY,\s*4\)\s+AS\s+INT\)", sql, re.IGNORECASE)
-        if match:
-            expr = "CAST(LEFT(OrderFY, 4) AS INT)"
-            if "ORDER BY" in sql.upper():
-                # Insert before ORDER BY
+        if "LEFT(OrderFY, 4)" in sql or "OrderFY" in sql:
+            match = re.search(r"LEFT\s*\(\s*OrderFY\s*,\s*4\s*\)", sql, re.IGNORECASE)
+            if match:
                 sql = re.sub(
                     r"\s+ORDER BY",
-                    f"\nGROUP BY {expr}\nORDER BY",
+                    "\nGROUP BY [dbo].[SalesPlanTable].[CustomerCode], LEFT(OrderFY, 4)\nORDER BY",
                     sql,
                     flags=re.IGNORECASE
                 )
             else:
-                sql += f"\nGROUP BY {expr}"
+                # Simple case: group by customer only
+                sql = re.sub(
+                    r"\s+ORDER BY",
+                    "\nGROUP BY [dbo].[SalesPlanTable].[CustomerCode]\nORDER BY",
+                    sql,
+                    flags=re.IGNORECASE
+                )
 
-    # Fix 4: Add ORDER BY if not present (optional, improves UX)
-    if has_aggregation and "ORDER BY" not in sql.upper():
-        if "FY" in sql:
-            sql += "\nORDER BY FY"
-        elif "CAST(LEFT(OrderFY, 4) AS INT)" in sql:
-            sql += "\nORDER BY CAST(LEFT(OrderFY, 4) AS INT)"
-
-    # Fix 5: Clean up double brackets
+    # --- Fix 5: Clean up double brackets ---
     sql = re.sub(r"\[\[([^\]]+)\]\]", r"[\1]", sql)  # [[Amount]] → [Amount]
     sql = re.sub(r"\[\[([^\]]+)\]", r"[\1]", sql)
     sql = re.sub(r"\[([^\]]+)\]\]", r"[\1]", sql)
