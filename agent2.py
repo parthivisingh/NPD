@@ -4,6 +4,8 @@ import pyodbc
 import requests
 from dotenv import load_dotenv
 
+from intent_router import generate_sql as generate_sql_template
+
 load_dotenv()
 
 # ---------------- CONFIG ----------------
@@ -99,40 +101,15 @@ def get_column_mapping(conn):
     return fuzzy_map
 
 # ---------------- OLLAMA (NL -> SQL) ----------------
-SYSTEM_PROMPT = """You are a senior SQL analyst for Microsoft SQL Server.
-Return ONLY a valid T-SQL SELECT statement based on the user's question and the provided schema.
+SYSTEM_PROMPT = """You are a helpful assistant that translates natural language into T-SQL SELECT queries for Microsoft SQL Server.
 
-Rules:
-- Read-only: do not modify data (no INSERT/UPDATE/DELETE/ALTER/DROP/TRUNCATE/CREATE).
-- Use fully qualified names (schema.table).
-- Use ONLY the exact column names from the schema. NEVER invent or modify column names.
-- NEVER use a column that is not listed in the schema.
-- Example: If schema shows [OrderFY], do not use [Ord_FY], [FY], or [OrderYear].
-- Do not wrap function calls (like SUM(...), CAST(...)) in square brackets.
-- Only wrap actual column or table names in [ ] if they contain spaces or are reserved keywords.
-- If a column is VARCHAR but contains year values (e.g., '2023'), use CAST(column AS INT), not YEAR().
-- Do not use YEAR(), MONTH(), etc. on non-date columns.
-- Place TOP 100 immediately after SELECT: SELECT TOP 100 ...
-- Do not put TOP at the end of the query.
-- Do not output markdown unless in a code block.
-- Do not add explanations. Only output the SQL query.
-- If OrderFY contains values like '2024-25', extract the first year using LEFT(OrderFY, 4), then CAST to INT.
-- Do not use CAST(OrderFY AS INT) directly — it will fail.
-- If MonthName contains month names like 'January', 'April', do NOT use CAST(MonthName AS INT).
-- To filter for April to June, use: MonthName IN ('April', 'May', 'June').
-- Do not assume numeric values unless the schema says so.
-- If filtering by numeric month, use columns like Order_Month_Number or document_Month_Number, not MonthName.
-- When the user says "compare", return aggregated values (SUM, COUNT) for each group.
-- Do not return raw rows unless asked for "list" or "show rows".
-- Example: "Compare sales in 2023 vs 2024" → use GROUP BY or PIVOT to show totals per year.
-- When asked to "compute growth" between two fiscal years, return:
-  - SUM for the first year
-  - SUM for the second year
-  - Absolute growth (difference)
-  - Percentage growth: (new - old)/old * 100
-- Use CASE WHEN OrderFY = '2024-25' THEN Amount ... END pattern.
-- Do not use window functions like OVER() for simple year-over-year growth.
-- Use the exact OrderFY values (e.g., '2024-25'), not CAST to INT.
+Guidelines:
+- Return ONLY the SQL query, no explanations.
+- Use SELECT to answer the question.
+- Use only column names from the schema. Do not invent new column names or modify existing column names.
+- Wrap column names in [ ] only if they have spaces or are reserved keywords.
+- Do not use INSERT, UPDATE, DELETE, or DDL commands.
+- Do not output markdown or code fences.
 """
 
 def generate_sql(question: str, schema_text: str) -> str:
@@ -300,31 +277,28 @@ def main():
     print("[*] Schema ready.")
 
     while True:
+        q = input("\nAsk about your data (or 'exit'): ").strip()
+        if q.lower() in ("exit", "quit"):
+            break
+
         try:
-            q = input("\nAsk about your data (or 'exit'): ").strip()
-            if q.lower() in ("exit", "quit"):
-                break
-            if not q:
-                continue
+            # Step 1: Try template-based SQL
+            sql = generate_sql_template(q, schema_text)
 
-            # Step 1: Generate SQL
-            sql = generate_sql(q, schema_text)
-            print("\n--- Raw Generated SQL ---")
-            print(sql)
+            # Step 2: If no template, fall back to LLM
+            if sql is None:
+                print("No template matched. Using LLM...")
+                sql = generate_sql(q, schema_text)  # Your existing LLM call
+                sql = rewrite_sql(sql)
+            else:
+                print("\n--- Using Template-Based SQL ---")
 
-            # Step 2: Rewrite for known issues
-            sql = rewrite_sql(sql)
+            print("\n--- Generated SQL ---\n", sql)
 
-            # Step 3: Correct column names (e.g., Ord_FY → OrderFY)
-            print("\n--- Final Corrected SQL ---")
-            print(sql)
-
-            # Step 4: Safety check
             if not is_safe_sql(sql):
-                print("\n[!] Refusing to run non-SELECT or unsafe SQL.")
+                print("\n[!] Refusing to run unsafe SQL.")
                 continue
 
-            # Step 5: Execute
             cols, rows = execute_sql(conn, sql)
             print("\n--- Results ---")
             print("\t".join(cols))
