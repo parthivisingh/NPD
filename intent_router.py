@@ -353,12 +353,18 @@ ORDER BY Count_{thing_col} DESC
         mon1, yr1, mon2, yr2 = match.groups()
         code1 = f"{mon1.strip()[:3].upper()}{yr1}"  # 'apr-25' → 'APR25'
         code2 = f"{mon2.strip()[:3].upper()}{yr2}"
-        where_sql = f" WHERE [MMMMYY] IN ('{code1}', '{code2}')"
+
+        # Only include valid MMMMYY values: 3 letters + 2 digits
+        where_sql = f"""
+        WHERE [MMMMYY] IS NOT NULL 
+        AND [MMMMYY] LIKE '[A-Z][A-Z][A-Z][A-Z][0-9][0-9]'
+        AND [MMMMYY] IN ('{code1}', '{code2}')
+        """
 
         return f"""
-SELECT
-    SUM(CASE WHEN [MMMMYY] = '{code1}' THEN Amount ELSE 0 END) AS Total_{code1},
-    SUM(CASE WHEN [MMMMYY] = '{code2}' THEN Amount ELSE 0 END) AS Total_{code2}
-FROM dbo.SalesPlanTable
-{where_sql}
-"""
+    SELECT
+        SUM(CASE WHEN [MMMMYY] = '{code1}' THEN Amount ELSE 0 END) AS Total_{code1},
+        SUM(CASE WHEN [MMMMYY] = '{code2}' THEN Amount ELSE 0 END) AS Total_{code2}
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    """

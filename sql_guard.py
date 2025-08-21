@@ -105,22 +105,45 @@ class SQLGuard:
     def validate_columns(self, sql: str) -> Tuple[bool, List[str]]:
         """
         Check if SQL uses only valid columns.
-        Returns (is_valid, invalid_columns)
+        Skips: keywords, strings, aliases, functions, table names.
         """
         invalid = []
-        tokens = re.finditer(r"\[\s*([^\]]+)\s*\]|\b([a-zA-Z_][\w]*)\b", sql)
+        # Match: [col] or bare col (only if not in string or keyword)
+        # Skip anything inside quotes
+        no_strings = re.sub(r"'[^']*'", "", sql)  # Remove single-quoted strings
+        no_dbl_strings = re.sub(r'"[^"]*"', "", no_strings)  # Remove double-quoted
+        clean_sql = re.sub(r"`[^`]*`", "", no_dbl_strings)  # Remove backticks
+
+        # Find column references: [col] or bare col (not part of keyword)
+        tokens = re.finditer(r"\[\s*([^\]]+)\s*\]|\b([a-zA-Z_][\w]*)\b", clean_sql)
+
         for match in tokens:
             inner = match.group(1) or match.group(2)
+
+            # Skip SQL keywords
             if inner.upper() in {
                 "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "TOP",
                 "SUM", "COUNT", "AVG", "MIN", "MAX", "CAST", "INT", "AS",
-                "AND", "OR", "IN", "LIKE", "IS", "NULL", "NOT", "UNION"
+                "AND", "OR", "IN", "LIKE", "IS", "NULL", "NOT", "UNION",
+                "CASE", "WHEN", "THEN", "ELSE", "END", "OVER", "PARTITION",
+                "JOIN", "ON", "USING", "WITH", "AS", "INTO"
             }:
                 continue
+
+            # Skip if it's a table/schema
+            if inner.lower() in {"dbo", "salesplantable"}:
+                continue
+
+            # Skip if it's an alias (appears after AS)
+            if re.search(rf"\bAS\s+{re.escape(inner)}\b", sql, re.I):
+                continue
+
+            # Check if valid column
             if inner not in self.valid_columns and f"[{inner}]" not in self.valid_columns:
                 resolved = self.resolve_column(inner)
                 if resolved not in self.valid_columns:
                     invalid.append(inner)
+        logger.debug(f"Parsing SQL: {clean_sql}")
 
         return len(invalid) == 0, invalid
 
@@ -212,8 +235,10 @@ class SQLGuard:
         if re.search(r"cast.*?orderfy.*?int", sql_lower):
             return False, "Do not use CAST(OrderFY AS INT) to filter by month-year"
 
-        # Rule 4: Using MonthName without MMMMYY when available
-        if "[MonthName]" in sql and "[MMMMYY]" in self.valid_columns:
-            return False, "Use [MMMMYY] for month-year filtering"
+        # Rule 4: Using [MonthName] when [MMMMYY] is available
+        if "[MonthName]" in sql and "MMMMYY" in self.valid_columns:
+            return False, "Use [MMMMYY] for month-year filtering — [MonthName] is too broad"
+        
+        
 
         return True, "OK"

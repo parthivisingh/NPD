@@ -3,6 +3,7 @@ import re
 import pyodbc
 import requests
 from dotenv import load_dotenv
+import traceback
 
 from intent_router import generate_sql as generate_sql_template
 from sql_guard import SQLGuard
@@ -52,8 +53,7 @@ def fetch_schema_text(conn, include_schemas=("dbo",), limit_tables=50) -> str:
     cur = conn.cursor()
     placeholders = ",".join("?" for _ in include_schemas)
     cur.execute(f"""
-        SELECT TOP 1000
-            TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE
+        SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE
         FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA IN ({placeholders})
         ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION
@@ -75,7 +75,6 @@ def fetch_schema_text(conn, include_schemas=("dbo",), limit_tables=50) -> str:
     lines.append("")
     lines.append("-- Note: OrderFY is VARCHAR(10) containing year like '2023'. Use CAST(OrderFY AS INT) to treat as number.")
     lines.append("-- Note: [MMMMYY] = 'APR25', 'JUL25' — use for month-year filtering")
-    lines.append("-- Do NOT use [MMMYY] — it does not exist.")
     return "\n".join(lines)
 
 def get_column_mapping(conn):
@@ -139,7 +138,11 @@ def generate_sql(question: str, schema_text: str) -> str:
 
         data = r.json()
         # Fireworks is OpenAI-compatible: result is in choices[0].message.content
-        raw = data["choices"][0]["message"]["content"].strip()
+        #raw = data["choices"][0]["message"]["content"].strip()
+        raw = (
+            data["choices"][0].get("message", {}).get("content") 
+            or data["choices"][0].get("text", "")
+        ).strip()
 
         # Extract SQL from code blocks
         if "```sql" in raw:
@@ -171,7 +174,8 @@ def is_safe_sql(sql: str) -> bool:
         cleaned = cleaned[5:].strip()
 
     # Must start with SELECT
-    if not cleaned.startswith("select"):
+    #if not cleaned.startswith("select"):
+    if not cleaned.lstrip(" (").startswith("select"):
         return False
 
     # Block write operations
@@ -182,6 +186,8 @@ def execute_sql(conn, sql: str):
     cur = conn.cursor()
     cur.execute(sql)
     columns = [desc[0] for desc in cur.description]
+    if cur.description is None:
+        return [], []
     rows = cur.fetchall()
     return columns, rows
 
@@ -258,6 +264,7 @@ def main():
             print(f"[ERROR] SQL execution failed: {e}")
         except Exception as e:
             print(f"[ERROR] Unexpected error: {e}")
+            traceback.print_exc()
 
     conn.close()
     print("[*] Bye.")
