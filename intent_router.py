@@ -172,6 +172,7 @@ def detect_intent(q: str) -> str:
         return "total"
     if "amount by" in q or "sales by" in q:
         return "aggregate"
+    
 
     return "unknown"
 
@@ -249,8 +250,22 @@ WHERE [monthyear] IN ('{my1}', '{my2}')
         match = re.search(r"between\s+(.+?)\s+(?:and|to)\s+(.+)", q_clean, re.I)
         if match:
             start_raw, end_raw = match.groups()
-            start = normalize_my(start_raw.strip())
-            end = normalize_my(end_raw.strip())
+            
+            # Handle "previous", "current", or normalize month/year
+            def resolve_my(text: str) -> str:
+                text = text.strip().lower()
+                if "previous" in text:
+                    # Previous month
+                    prev_month = (date.today().replace(day=1) - timedelta(days=1))
+                    return prev_month.strftime("%b-%y")
+                elif "current" in text:
+                    # Current month
+                    return date.today().strftime("%b-%y")
+                else:
+                    return normalize_my(text)
+
+            start = resolve_my(start_raw)
+            end = resolve_my(end_raw)
 
             # ✅ Add filters
             filters = extract_filters(q_clean)
@@ -258,22 +273,21 @@ WHERE [monthyear] IN ('{my1}', '{my2}')
             where_sql = " WHERE " + " AND ".join(filters)
 
             return f"""
-    SELECT
-        SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END) AS BaseAmount,
-        SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) AS NewAmount,
-        (SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) - 
-        SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)) AS Absolute_Growth,
-        CASE 
-            WHEN SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END) > 0
-            THEN (SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) - 
-                SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)) * 100.0 / 
-                SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)
-            ELSE NULL 
-        END AS Pct_Growth
-    FROM dbo.SalesPlanTable
-    {where_sql}
-    """
-
+        SELECT
+            SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END) AS BaseAmount,
+            SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) AS NewAmount,
+            (SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) - 
+            SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)) AS Absolute_Growth,
+            CASE 
+                WHEN SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END) > 0
+                THEN (SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) - 
+                    SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)) * 100.0 / 
+                    SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)
+                ELSE NULL 
+            END AS Pct_Growth
+        FROM dbo.SalesPlanTable
+        {where_sql}
+        """
     # -------------------------------
     # 3. Top N: "List top 10 customers by amount in FY 2025-26"
     # -------------------------------
@@ -296,7 +310,6 @@ FROM dbo.SalesPlanTable
 GROUP BY [{entity}]
 ORDER BY Total{metric} DESC
 """
-
     # -------------------------------
     # 4. List Rows: "list of no, date, customer..."
     # -------------------------------
@@ -306,35 +319,39 @@ ORDER BY Total{metric} DESC
         if not mapped_cols:
             return None
 
-        select_cols = ", ".join(f"[{c}]" for c in mapped_cols)
         filters = extract_filters(q_clean)
         where_sql = " WHERE " + " AND ".join(filters) if filters else ""
 
         if "total amount" in q_clean:
-            # Aggregate by non-Amount columns
+            # Exclude 'Amount' from GROUP BY and SELECT (we're summing it)
             group_cols = ", ".join(f"[{c}]" for c in mapped_cols if c != "Amount")
+            select_cols = ", ".join(f"[{c}]" for c in mapped_cols if c != "Amount")
+
             if not group_cols:
                 return f"""
-    SELECT
-        SUM(Amount) AS TotalAmount
-    FROM dbo.SalesPlanTable
-    {where_sql}
-    """
+        SELECT
+            SUM(Amount) AS TotalAmount
+        FROM dbo.SalesPlanTable
+        {where_sql}
+        """
+
             return f"""
-    SELECT
-        {select_cols}, SUM(Amount) AS TotalAmount
-    FROM dbo.SalesPlanTable
-    {where_sql}
-    GROUP BY {group_cols}
-    ORDER BY TotalAmount DESC
-    """
+        SELECT
+            {select_cols}, SUM(Amount) AS TotalAmount
+        FROM dbo.SalesPlanTable
+        {where_sql}
+        GROUP BY {group_cols}
+        ORDER BY TotalAmount DESC
+        """
         else:
+            select_cols = ", ".join(f"[{c}]" for c in mapped_cols)
             return f"""
-    SELECT
-        {select_cols}
-    FROM dbo.SalesPlanTable
-    {where_sql}
-    """
+        SELECT
+            {select_cols}
+        FROM dbo.SalesPlanTable
+        {where_sql}
+        ORDER BY OrderDate DESC
+        """
 
     # -------------------------------
     # 5. Aggregate: "Total amount by FY and type"
@@ -369,7 +386,8 @@ ORDER BY TotalAmount DESC
     # 6. Count: "Count of No in month year apr-25"
     # -------------------------------
     if intent == "count":
-        match = re.search(r"count of (\w+)", q_clean, re.I)
+        #match = re.search(r"count of (\w+)", q_clean, re.I)
+        match = re.search(r"count of ([\w\s]+?)(?:\s+(?:by|in|where|$))", q_clean, re.I)
         if match:
             thing = match.group(1).strip()
             col = resolve_column(thing) or "DocumentNo"
@@ -379,7 +397,7 @@ ORDER BY TotalAmount DESC
 
             return f"""
 SELECT
-    COUNT(DISTINCT [{col}]) AS Count_{col}
+    COUNT(DISTINCT [Customer_Name]) AS Count_Customer_Name
 FROM dbo.SalesPlanTable
 {where_sql}
 """

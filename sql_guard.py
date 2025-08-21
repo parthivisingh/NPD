@@ -134,6 +134,7 @@ class SQLGuard:
             if re.search(rf"\bAS\s+{re.escape(inner)}\b", sql, re.I):
                 continue
             
+            
             if re.search(rf"\bAS\s+\[\s*{re.escape(inner)}\s*\]", sql, re.I):
                 continue
 

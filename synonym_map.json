@@ -1,13 +1,12 @@
 {
   "columns": {
-    "Amount": ["Sales", "Value", "amount","value", "sales amount", "sales value",
-               "sales is", "value is", "amount is", "sales value is"],
+    "Amount": ["Sales", "Value", "amount","value", "sales amount", "sales value"],
+
     "OrderFY": [
       "Fiscal Year", "FY", "fiscal", "fiscal year",
       "in FY", "for FY", "fy", "year", "fiscal year is", "fiscal year for", "fiscal year in", "year",
-      "current fy", "previous fy", "that is current", "is current", "current fiscal", "previous fiscal",
-      "f.y."
-    ],
+      "current fy", "previous fy", "is current", "current fiscal", "previous fiscal"],
+
     "OrderDate": ["date", "Date", "order date", "Order Date"],
     "Customer_Name": [
       "Customer", "Customer Name", "Party", "Client","clients",
@@ -28,6 +27,7 @@
                          "invoiced quantity", "qty invoiced is", "invoiced quantity is"],
 
     "Quantity": ["Order Quantity", "Order Qty", "quantity", "qty"],
+
     "OutstandingQuantity": [
       "Balance Quantity", "Balance Qty",
       "outstanding qty", "balance", "outstanding quantity"
@@ -42,7 +42,7 @@
       "august 2024", "july 2025", "apr 25", "april 2025"],
 
     "MPCODE": ["Item", "Product", "MP", "mp code","material code",
-      "material", "item code", "product code", "mp code is", "item is", "product is"],
+      "material", "item code", "product code", "mp code is", "item is", "product is", "items","Items", "Products", "Materials", "materials"],
 
     "PlannedQuarter": ["Quarter", "Order Quarter", "Qtr", "quarter","Q1", "Q2", "Q3", "Q4",
       "in Q1", "in quarter 1", "in Q2", "in quarter 2",
@@ -63,7 +63,7 @@
       "growth month", "growth by month", "gm", "monthly growth"
     ],
     "growth_month_pct": [
-      "growth month %", "growth by month %", "gm%", "monthly growth %"
+      "growth month %", "growth by month %", "monthly growth %"
     ],
     "growth_year": [
       "growth year", "growth by year", "gy", "annual growth"
@@ -104,7 +104,7 @@
   },
   "values": {
     "MFGMode": {
-      "Production": ["production", "mfg=prod", "mfg: production"]
+      "Production": ["production"]
     },
     "Type": {
       "Order": ["order", "orders"],
