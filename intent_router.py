@@ -1,133 +1,115 @@
 # intent_router.py
 
 import re
-from typing import Dict, List, Optional
-from datetime import datetime
+from typing import Dict, Optional
+from datetime import datetime, date, timedelta
 import json
 
 # -------------------------------
-# Load Synonym Map (do this once)
+# Load Synonym Map
 # -------------------------------
 
 def load_synonym_map(path="synonym_map.json"):
-    """Load synonym map from JSON file."""
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-
-        # Flatten for fast lookup: "sales" -> "Amount"
         word_to_col = {}
         for col, synonyms in data.get("columns", {}).items():
             for syn in synonyms:
                 word_to_col[syn.lower().strip()] = col
-
-        intent_map = {}
-        for intent, phrases in data.get("intent", {}).items():
-            for phrase in phrases:
-                intent_map[phrase.lower().strip()] = intent
-
-        metric_map = {}
-        for metric, phrases in data.get("metrics", {}).items():
-            for phrase in phrases:
-                metric_map[phrase.lower().strip()] = metric
-
-        return {
-            "word_to_col": word_to_col,
-            "intent_map": intent_map,
-            "metric_map": metric_map,
-            "raw": data
-        }
+        return word_to_col
     except Exception as e:
         print(f"[ERROR] Failed to load synonym_map.json: {e}")
-        return {
-            "word_to_col": {},
-            "intent_map": {},
-            "metric_map": {}
-        }
+        return {}
 
-# Load once at module level
 SYNONYM_MAP = load_synonym_map()
 
 # -------------------------------
-# Helper Functions
+# Helpers
 # -------------------------------
 
 def resolve_column(text: str) -> str:
-    """
-    Resolve a natural language word to a real column name.
-    Example: 'fy' -> 'OrderFY', 'customer' -> 'Customer_Name'
-    """
     if not text:
         return None
     text = text.lower().strip()
-    if text in SYNONYM_MAP["word_to_col"]:
-        return SYNONYM_MAP["word_to_col"][text]
+    return SYNONYM_MAP.get(text, None)
 
-    # Check partial match (longest first)
-    for key in sorted(SYNONYM_MAP["word_to_col"], key=len, reverse=True):
-        if key in text:
-            return SYNONYM_MAP["word_to_col"][key]
-    return None
-
-def detect_intent(q: str) -> Dict[str, str]:
-    """
-    Detect high-level intents: current_fy, previous_fy.
-    Returns resolved values.
-    """
-    q = q.lower()
+def resolve_fy_hint(hint: str) -> str:
+    hint = hint.lower().strip()
     today = datetime.now()
     year = today.year
     month = today.month
+    current_fy = f"{year}-{str(year+1)[-2:]}" if month >= 4 else f"{year-1}-{str(year)[-2:]}"
+    
+    if "current" in hint:
+        return current_fy
+    elif "previous" in hint:
+        curr_start = int(current_fy.split("-")[0])
+        return f"{curr_start-1}-{str(curr_start)[-2:]}"
+    elif re.match(r"20\d{2}-\d{2}", hint):
+        return hint
+    return None
 
-    if month >= 4:
-        current_fy = f"{year}-{str(year+1)[-2:]}"
-    else:
-        current_fy = f"{year-1}-{str(year)[-2:]}"
+def normalize_month_year(text: str) -> str:
+    month_map = {
+        'january': 'Jan', 'february': 'Feb', 'march': 'Mar',
+        'april': 'Apr', 'may': 'May', 'june': 'Jun',
+        'july': 'Jul', 'august': 'Aug', 'september': 'Sep',
+        'october': 'Oct', 'november': 'Nov', 'december': 'Dec'
+    }
+    for full, abbr in month_map.items():
+        if full in text.lower():
+            year_match = re.search(r"(\d{4})", text)
+            if year_match:
+                return f"{abbr}-{year_match.group(1)[2:]}"
+    return text.title()
 
-    prev_fy = f"{int(current_fy.split('-')[0]) - 1}-{current_fy.split('-')[1]}"
-
-    if "current fy" in q or "is current" in q:
-        return {"fy": current_fy}
-    elif "previous fy" in q or "fy previous" in q:
-        return {"fy": prev_fy}
-    else:
-        fy_match = re.search(r"fy\s+(20\d{2}-\d{2})", q)
-        if fy_match:
-            return {"fy": fy_match.group(1)}
-    return {}
+def extract_value_after(q: str, keyword: str, pattern: str) -> str:
+    match = re.search(rf"{keyword}\s+{pattern}", q, re.I)
+    return match.group(1).strip() if match else None
 
 # -------------------------------
-# Structured Query Parser
+# Unified Intent Parser
 # -------------------------------
 
-def parse_query(q: str) -> Dict:
+def parse_intent(q: str) -> Dict:
     """
     Parse full query into structured intent.
     No premature decisions.
     """
-    q_orig = q
     q = q.lower().strip()
     intent = {
-        "metric": "SUM(Amount)",
+        "verb": None,
+        "metric": "Amount",
         "group_by": [],
+        "columns": [],  # for list rows
         "filters": []
     }
 
-    # 1. Metric
-    if "total amount" in q:
-        intent["metric"] = "SUM(Amount)"
-    elif "count of" in q:
-        match = re.search(r"count of (\w+)", q)
-        col = match.group(1).strip() if match else "DocumentNo"
-        resolved = resolve_column(col)
-        intent["metric"] = f"COUNT(DISTINCT [{resolved}])" if resolved else "COUNT(*)"
-    elif "invoiced quantity" in q:
-        intent["metric"] = "SUM(InvoicedQuantity)"
-    elif "quantity" in q:
-        intent["metric"] = "SUM(Quantity)"
+    # 1. Detect Verb
+    if "compare" in q:
+        intent["verb"] = "compare"
+    elif "growth" in q:
+        intent["verb"] = "growth"
+    elif "top" in q or "list" in q:
+        intent["verb"] = "top"
+    elif any(kw in q for kw in ["list of", "show me", "date,", "no,", "customer,"]):
+        intent["verb"] = "list_rows"
+    else:
+        intent["verb"] = "aggregate"
 
-    # 2. Group By
-    by_match = re.search(r"by\s+([\w\s\-]+?)(?:\s+(?:and|for|in|where|$))", q)
+    # 2. Metric
+    if "invoiced quantity" in q:
+        intent["metric"] = "InvoicedQuantity"
+    elif "quantity" in q:
+        intent["metric"] = "Quantity"
+    elif "backlog" in q:
+        intent["metric"] = "BacklogAmount"
+    else:
+        intent["metric"] = "Amount"
+
+    # 3. Group By / Columns
+    by_match = re.search(r"by\s+([\w\s\-]+?)(?:\s+(?:and|for|in|$))", q)
     if by_match:
         parts = re.split(r"\s+and\s+|\s*,\s+", by_match.group(1).strip())
         for part in parts:
@@ -135,32 +117,30 @@ def parse_query(q: str) -> Dict:
             if col:
                 intent["group_by"].append(col)
 
-    # 3. Filters
-    # a. FY from intent
-    fy_intent = detect_intent(q)
-    if "fy" in fy_intent:
-        intent["filters"].append(f"OrderFY = '{fy_intent['fy']}'")
+    # 4. Columns (for list)
+    if intent["verb"] == "list_rows":
+        col_names = re.findall(r"(no|date|customer|amount|total amount)", q)
+        for c in col_names:
+            col = resolve_column(c) or c.title()
+            if col not in intent["columns"]:
+                intent["columns"].append(col)
 
-    # b. Month range: "month is April to June"
-    month_match = re.search(r"month is (\w+) to (\w+)", q, re.I)
-    if month_match:
-        start, end = month_match.groups()
-        month_order = [
-            "January", "February", "March",
-            "April", "May", "June",
-            "July", "August", "September",
-            "October", "November", "December"
-        ]
-        try:
-            start_idx = month_order.index(start.title())
-            end_idx = month_order.index(end.title()) + 1
-            months = month_order[start_idx:end_idx]
-            month_list = "', '".join(months)
-            intent["filters"].append(f"[MonthName] IN ('{month_list}')")
-        except ValueError:
-            pass
+    # 5. Filters
+    # a. FY
+    fy_hint = extract_value_after(q, r"(?:for|in)\s+fy", r"(20\d{2}-\d{2}|current|previous)")
+    if not fy_hint:
+        fy_hint = "current" if "current" in q else "previous" if "previous" in q else None
+    if fy_hint:
+        resolved = resolve_fy_hint(fy_hint)
+        if resolved:
+            intent["filters"].append(f"OrderFY = '{resolved}'")
 
-    # c. MFGMode: "mfg is production"
+    # b. Previous Month
+    if "previous month" in q:
+        prev_month = (date.today().replace(day=1) - timedelta(days=1)).strftime("%b-%y")
+        intent["filters"].append(f"UPPER([monthyear]) = UPPER('{prev_month}')")
+
+    # c. MFGMode
     mfg_match = re.search(r"mfg\s+is\s+([\w-]+)", q, re.I)
     if mfg_match:
         intent["filters"].append(f"[MFGMode] = '{mfg_match.group(1).title()}'")
@@ -175,118 +155,123 @@ def parse_query(q: str) -> Dict:
     if type_match:
         intent["filters"].append(f"[Type] = '{type_match.group(1)}'")
 
-    # f. monthyear: "apr-25"
-    my_match = re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)-(\d{2})\b", q, re.I)
-    if my_match:
-        mon, yr = my_match.groups()
-        val = f"{mon.title()}-{yr}"
-        intent["filters"].append(f"[monthyear] = '{val}'")
+    # f. Month-Year Range (for growth)
+    if intent["verb"] == "growth":
+        month_match = re.search(r"between\s+(\w+\s+\d{4})\s+and\s+(\w+\s+\d{4})", q, re.I)
+        if month_match:
+            start, end = month_match.groups()
+            start_my = normalize_month_year(start)
+            end_my = normalize_month_year(end)
+            intent["period1"] = start_my
+            intent["period2"] = end_my
 
     return intent
 
+# -------------------------------
+# SQL Generators
+# -------------------------------
+
 def generate_sql_from_intent(intent: Dict) -> str:
-    """
-    Build SQL from structured intent.
-    """
+    verb = intent["verb"]
     metric = intent["metric"]
-    group_by = intent["group_by"]
     filters = intent["filters"]
-
-    # Default group_by
-    if not group_by:
-        group_by = ["OrderFY"]  # fallback
-
-    # SELECT
-    select_cols = ", ".join(f"[{col}]" for col in group_by)
-    select_sql = f"SELECT {select_cols}, {metric} AS TotalAmount"
-
-    # FROM
-    from_sql = "FROM dbo.SalesPlanTable"
-
-    # WHERE
     where_sql = " WHERE " + " AND ".join(filters) if filters else ""
 
-    # GROUP BY
-    group_sql = " GROUP BY " + ", ".join(f"[{col}]" for col in group_by)
-
-    # ORDER BY
-    if "MonthName" in group_by:
-        order_sql = """
-ORDER BY 
-    CASE [MonthName]
-        WHEN 'April' THEN 1 WHEN 'May' THEN 2 WHEN 'June' THEN 3
-        WHEN 'July' THEN 4 WHEN 'August' THEN 5 WHEN 'September' THEN 6
-        WHEN 'October' THEN 7 WHEN 'November' THEN 8 WHEN 'December' THEN 9
-        WHEN 'January' THEN 10 WHEN 'February' THEN 11 WHEN 'March' THEN 12
-    END
+    if verb == "aggregate":
+        group_by = intent["group_by"] or ["OrderFY"]
+        select_cols = ", ".join(f"[{col}]" for col in group_by)
+        return f"""
+SELECT
+    {select_cols},
+    SUM([{metric}]) AS TotalAmount
+FROM dbo.SalesPlanTable
+{where_sql}
+GROUP BY {select_cols}
+ORDER BY TotalAmount DESC
 """
-    else:
-        order_sql = " ORDER BY TotalAmount DESC"
 
-    return f"{select_sql}\n{from_sql}\n{where_sql}\n{group_sql}\n{order_sql}"
+    elif verb == "compare":
+        val1 = extract_value_after(intent["raw"], "in", r"(.+?)\s+(?:and|vs)")
+        val2 = extract_value_after(intent["raw"], r"(?:and|vs)", r"(.+)")
+        col = "OrderFY" if re.match(r"20\d{2}-\d{2}", val1) else "monthyear"
+        return f"""
+SELECT
+    SUM(CASE WHEN {col} = '{val1}' THEN {metric} ELSE 0 END) AS [{val1}],
+    SUM(CASE WHEN {col} = '{val2}' THEN {metric} ELSE 0 END) AS [{val2}]
+FROM dbo.SalesPlanTable
+WHERE {col} IN ('{val1}', '{val2}')
+{where_sql}
+"""
 
-# -------------------------------
-# Main Entry Point
-# -------------------------------
+    elif verb == "growth":
+        p1 = intent.get("period1")
+        p2 = intent.get("period2")
+        if p1 and p2:
+            return f"""
+SELECT
+    SUM(CASE WHEN [monthyear] = '{p1}' THEN Amount ELSE 0 END) AS BaseAmount,
+    SUM(CASE WHEN [monthyear] = '{p2}' THEN Amount ELSE 0 END) AS NewAmount,
+    (SUM(CASE WHEN [monthyear] = '{p2}' THEN Amount ELSE 0 END) - 
+     SUM(CASE WHEN [monthyear] = '{p1}' THEN Amount ELSE 0 END)) AS Absolute_Growth,
+    CASE 
+        WHEN SUM(CASE WHEN [monthyear] = '{p1}' THEN Amount ELSE 0 END) > 0
+        THEN (SUM(CASE WHEN [monthyear] = '{p2}' THEN Amount ELSE 0 END) - 
+              SUM(CASE WHEN [monthyear] = '{p1}' THEN Amount ELSE 0 END)) * 100.0 / 
+             SUM(CASE WHEN [monthyear] = '{p1}' THEN Amount ELSE 0 END)
+        ELSE NULL 
+    END AS Pct_Growth
+FROM dbo.SalesPlanTable
+WHERE [monthyear] IN ('{p1}', '{p2}')
+{where_sql}
+"""
+
+    elif verb == "top":
+        n = re.search(r"top\s+(\d+)", intent["raw"], re.I)
+        n = n.group(1) if n else "10"
+        entity = intent["group_by"][0] if intent["group_by"] else "Customer_Name"
+        return f"""
+SELECT TOP {n}
+    [{entity}],
+    SUM([{metric}]) AS Total{metric}
+FROM dbo.SalesPlanTable
+{where_sql}
+GROUP BY [{entity}]
+ORDER BY Total{metric} DESC
+"""
+
+    elif verb == "list_rows":
+        cols = intent["columns"] or ["DocumentNo", "OrderDate", "Customer_Name", "Amount"]
+        select_cols = ", ".join(f"[{c}]" for c in cols)
+        if "total amount" in intent["raw"]:
+            group_cols = ", ".join(f"[{c}]" for c in cols if c != "Amount")
+            return f"""
+SELECT
+    {select_cols}, SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+{where_sql}
+GROUP BY {group_cols}
+ORDER BY TotalAmount DESC
+"""
+        else:
+            return f"""
+SELECT
+    {select_cols}
+FROM dbo.SalesPlanTable
+{where_sql}
+ORDER BY OrderDate DESC
+"""
+
+    return None
 
 # -------------------------------
 # Main Entry Point
 # -------------------------------
 
 def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
-    """
-    Parse full query and generate SQL.
-    Priority order:
-        1. Compare
-        2. Growth
-        3. Structured parse (Total, Count, etc.)
-    """
-    q = question.lower().strip()
-
-    # -------------------------------------------------
-    # Template 1: Compare A and B
-    # Example: "Compare Amount in FY 2023-24 and 2024-25"
-    # -------------------------------------------------
-    if "compare" in q:
-        # Extract metric
-        metric_match = re.search(r"compare\s+(.+?)\s+in\s+", q, re.I)
-        metric = "Amount" if not metric_match else metric_match.group(1).strip()
-
-        # Extract two values
-        match = re.search(r"in\s+(.+?)\s+(?:and|vs)\s+(.+)", q, re.I)
-        if not match:
-            return None
-        val1_raw, val2_raw = match.groups()
-        val1 = val1_raw.strip().strip("'\"")
-        val2 = val2_raw.strip().strip("'\"")
-
-        # Detect if it's FY
-        if re.match(r"20\d{2}-\d{2}", val1) and re.match(r"20\d{2}-\d{2}", val2):
-            col = "OrderFY"
-            return f"""
-SELECT
-    SUM(CASE WHEN {col} = '{val1}' THEN {metric} ELSE 0 END) AS [{val1}],
-    SUM(CASE WHEN {col} = '{val2}' THEN {metric} ELSE 0 END) AS [{val2}]
-FROM dbo.SalesPlanTable
-WHERE {col} IN ('{val1}', '{val2}')
-"""
-
-        # Add other types (monthyear, etc.) later
-        return None
-
-    # -------------------------------------------------
-    # Template 2: Growth between A and B
-    # -------------------------------------------------
-    if "growth" in q and ("between" in q or "from" in q):
-        # Similar logic — return Pct_Growth
-        return None  # (you already have this)
-
-    # -------------------------------------------------
-    # Fallback: Structured Parse for "Total", "Count", etc.
-    # -------------------------------------------------
     try:
-        intent = parse_query(question)
+        intent = parse_intent(question)
+        intent["raw"] = question  # for extraction
         return generate_sql_from_intent(intent)
     except Exception as e:
-        print(f"[DEBUG] Intent parsing failed: {e}")
+        print(f"[DEBUG] Parse failed: {e}")
         return None
