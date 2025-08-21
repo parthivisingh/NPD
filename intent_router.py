@@ -3,129 +3,188 @@
 import re
 from typing import Dict, List, Optional
 from datetime import datetime, date, timedelta
+import json
 
-def resolve_fy(fy_hint: str, current_fy: str = None) -> str:
+# -------------------------------
+# Load Synonym Map (do this once)
+# -------------------------------
+
+def load_synonym_map(path="synonym_map.json"):
+    """Load synonym map from JSON file."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        # Flatten for fast lookup: "sales" -> "Amount"
+        word_to_col = {}
+        for col, synonyms in data.get("columns", {}).items():
+            for syn in synonyms:
+                word_to_col[syn.lower().strip()] = col
+
+        intent_map = {}
+        for intent, phrases in data.get("intent", {}).items():
+            for phrase in phrases:
+                intent_map[phrase.lower().strip()] = intent
+
+        metric_map = {}
+        for metric, phrases in data.get("metrics", {}).items():
+            for phrase in phrases:
+                metric_map[phrase.lower().strip()] = metric
+
+        return {
+            "word_to_col": word_to_col,
+            "intent_map": intent_map,
+            "metric_map": metric_map,
+            "raw": data
+        }
+    except Exception as e:
+        print(f"[ERROR] Failed to load synonym_map.json: {e}")
+        return {
+            "word_to_col": {},
+            "intent_map": {},
+            "metric_map": {}
+        }
+
+# Load once at module level
+SYNONYM_MAP = load_synonym_map()
+
+# -------------------------------
+# Helper Functions
+# -------------------------------
+
+def resolve_column(text: str) -> str:
     """
-    Resolve FY hints like 'current', 'previous' to actual '2024-25' format.
-    Assumes April–March fiscal year (India standard).
-    Example:
-        - If today = Feb 2025 → current FY = 2024-25
-        - If today = Aug 2025 → current FY = 2025-26
+    Resolve a natural language word to a real column name.
+    Example: 'fy' -> 'OrderFY', 'customer' -> 'Customer_Name'
     """
-    if current_fy is None:
-        today = datetime.now()
-        year = today.year
-        month = today.month
+    text = text.lower().strip()
+    if text in SYNONYM_MAP["word_to_col"]:
+        return SYNONYM_MAP["word_to_col"][text]
 
-        if month >= 4:  # April or later → current FY starts this year
-            start_year = year
-            end_year = year + 1
-        else:  # Jan–March → current FY started last year
-            start_year = year - 1
-            end_year = year
+    # Check partial match
+    for key in sorted(SYNONYM_MAP["word_to_col"], key=len, reverse=True):
+        if key in text:
+            return SYNONYM_MAP["word_to_col"][key]
+    return None
 
-        current_fy = f"{start_year}-{str(end_year)[-2:]}"
+def detect_intent(q: str) -> Dict[str, bool]:
+    """
+    Detect high-level intents: current_fy, previous_fy, etc.
+    """
+    q = q.lower()
+    detected = {}
+    for phrase, intent in SYNONYM_MAP["intent_map"].items():
+        if phrase in q:
+            detected[intent] = True
+    return detected
 
-    fy_hint = fy_hint.lower().strip()
-    if fy_hint == "current":
+def resolve_fy_hint(q: str) -> str:
+    """
+    Detect if query wants 'current' or 'previous' FY.
+    """
+    intents = detect_intent(q)
+    today = datetime.now()
+    year = today.year
+    month = today.month
+
+    if month >= 4:
+        current_fy = f"{year}-{str(year+1)[-2:]}"
+    else:
+        current_fy = f"{year-1}-{str(year)[-2:]}"
+
+    if intents.get("current_fy"):
         return current_fy
-    elif fy_hint == "previous":
+    elif intents.get("previous_fy"):
         curr_start = int(current_fy.split("-")[0])
         prev_start = curr_start - 1
         return f"{prev_start}-{str(curr_start)[-2:]}"
-    else:
-        # Assume it's a direct FY string like '2023-24'
-        return fy_hint
+    return None
 
-def resolve_month_year(my_hint: str) -> str:
-    """
-    Convert 'apr-24' → 'Apr-24' or handle 'previous month'
-    """
-    if my_hint.lower() == "previous month":
-        today = date.today()
-        first = today.replace(day=1)
-        last_month = first - timedelta(days=1)
-        return last_month.strftime("%b-%y").replace(".", "")
-    return my_hint.strip().title()
-
-def extract_filters(question: str) -> Dict[str, str]:
-    filters = {}
-
-    # Only extract filters if not a "compare month year" query
-    if re.search(r"compare.*?month\s+year", question, re.I):
-        return {}  # Skip filters — handled by template
-
-    # MFGMode: "mfg is production"
-    mfg_match = re.search(r"mfg\s+is\s+([\w-]+)", question, re.I)
-    if mfg_match:
-        filters["MFGMode"] = mfg_match.group(1).strip().title()
-
-    # Customer_Name: "customer is ELTA SYSTEMS LTD"
-    cust_match = re.search(r"customer\s+is\s+([\w\s.&-]+?)(?:\s+and|\s+as|\s*$)", question, re.I)
-    if cust_match:
-        filters["Customer_Name"] = cust_match.group(1).strip()
-
-    # Type: "type is Order"
-    type_match = re.search(r"type\s+is\s+(\w+)", question, re.I)
-    if type_match:
-        filters["Type"] = type_match.group(1).strip()
-
-    # monthyear: "in apr-24" or "apr-24"
-    my_match = re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)-(\d{2})\b", question, re.I)
-    if my_match and not re.search(r"compare.*?month\s+year", question, re.I):
-        mon, yr = my_match.groups()
-        filters["monthyear"] = f"{mon.title()}-{yr}"
-
-    # MonthName: "month is April"
-    mn_match = re.search(r"month\s+is\s+(\w+)", question, re.I)
-    if mn_match and not re.search(r"compare.*?month\s+year", question, re.I):
-        filters["MonthName"] = mn_match.group(1).strip().title()
-
-    return filters
-
-def build_where_clause(filters: Dict[str, str]) -> str:
-    """
-    Build WHERE clause from filters.
-    """
-    conditions = []
-    for col, val in filters.items():
-        if col == "monthyear":
-            conditions.append(f"[{col}] = '{val}'")
-        else:
-            conditions.append(f"[{col}] = '{val}'")
-    return " AND ".join(conditions)
+# -------------------------------
+# Main SQL Generator
+# -------------------------------
 
 def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
-    """
-    Main entry point: detect intent and return SQL.
-    Returns None if no template matches (fallback to LLM).
-    """
     q = question.lower().strip()
 
-    # Always extract filters
-    filters = extract_filters(question)
-    where_extra = build_where_clause(filters)
-    where_parts = []
-    
+    # -----------------------------
+    # Template 1: Total amount by X
+    # -----------------------------
+    match = re.search(r"total\s+amount\s+by\s+(.+)", q)
+    if match:
+        col_hint = match.group(1).strip()
+        col = resolve_column(col_hint)
+        if not col:
+            return None  # fallback
+
+        return f"""
+SELECT
+    [{col}],
+    SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+GROUP BY [{col}]
+ORDER BY TotalAmount DESC
+"""
+
+    # -------------------------------------
+    # Template 2: Total amount by X and Y
+    # -------------------------------------
+    match = re.search(r"total\s+amount\s+by\s+(.+?)\s+(?:and|by)\s+(.+)", q)
+    if match:
+        col1_hint, col2_hint = match.groups()
+        col1 = resolve_column(col1_hint.strip())
+        col2 = resolve_column(col2_hint.strip())
+        if not col1 or not col2:
+            return None
+
+        return f"""
+SELECT
+    [{col1}], [{col2}],
+    SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+GROUP BY [{col1}], [{col2}]
+ORDER BY TotalAmount DESC
+"""
+
+    # ----------------------------------------
+    # Template 3: Amount by X for FY <value>
+    # ----------------------------------------
+    match = re.search(r"amount\s+by\s+(.+?)\s+(?:in|for)?\s*fy", q)
+    if match:
+        col_hint = match.group(1).strip()
+        col = resolve_column(col_hint)
+        if not col:
+            return None
+
+        fy = resolve_fy_hint(q)
+        if not fy:
+            # Try to extract FY like '2024-25'
+            fy_match = re.search(r"(20\d{2}-\d{2})", q)
+            fy = fy_match.group(1) if fy_match else None
+            if not fy:
+                return None
+
+        return f"""
+SELECT
+    [{col}],
+    SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+WHERE OrderFY = '{fy}'
+GROUP BY [{col}]
+ORDER BY TotalAmount DESC
+"""
+
     # -------------------------------------------------
-    # Template 4: Compare Amount by month in A and B
-    # Example: "Compare Amount by month in FY 2024-25 and 2025-26"
+    # Template 4: Compare Amount by month in FY A and B
     # -------------------------------------------------
-    #match = re.search(r"compare\s+amount\s+by\s+month\s+in\s+(.+?)\s+(?:and|vs)\s+(.+)", q, re.I)
-    match=re.search(r"compare\s+amount\s+by\s+month\s+in\s+(?:fy\s+)?(.+?)\s+(?:and|vs)\s+(.+)",q,re.I)
+    match = re.search(r"compare\s+amount\s+by\s+month\s+in\s+(.+?)\s+(?:and|vs)\s+(.+)", q)
     if match:
         fy1_raw, fy2_raw = match.groups()
         fy1 = fy1_raw.strip().strip("'\"")
         fy2 = fy2_raw.strip().strip("'\"")
 
-
-        # Validate format
         if not re.match(r"20\d{2}-\d{2}", fy1) or not re.match(r"20\d{2}-\d{2}", fy2):
-            return None  # Let LLM handle if not valid FY
-
-        where_parts.append(f"OrderFY IN ('{fy1}', '{fy2}')")
-        where_parts.append(where_extra) if where_extra else None
-        where_sql = " WHERE " + " AND ".join(where_parts) if where_parts else ""
+            return None
 
         return f"""
 SELECT 
@@ -133,238 +192,63 @@ SELECT
     SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END) AS [{fy1}],
     SUM(CASE WHEN OrderFY = '{fy2}' THEN Amount ELSE 0 END) AS [{fy2}]
 FROM dbo.SalesPlanTable
-{where_sql}
+WHERE OrderFY IN ('{fy1}', '{fy2}')
 GROUP BY [MonthName]
 ORDER BY 
     CASE [MonthName]
-        WHEN 'April' THEN 1
-        WHEN 'May' THEN 2
-        WHEN 'June' THEN 3
-        WHEN 'July' THEN 4
-        WHEN 'August' THEN 5
-        WHEN 'September' THEN 6
-        WHEN 'October' THEN 7
-        WHEN 'November' THEN 8
-        WHEN 'December' THEN 9
-        WHEN 'January' THEN 10
-        WHEN 'February' THEN 11
-        WHEN 'March' THEN 12
+        WHEN 'April' THEN 1 WHEN 'May' THEN 2 WHEN 'June' THEN 3
+        WHEN 'July' THEN 4 WHEN 'August' THEN 5 WHEN 'September' THEN 6
+        WHEN 'October' THEN 7 WHEN 'November' THEN 8 WHEN 'December' THEN 9
+        WHEN 'January' THEN 10 WHEN 'February' THEN 11 WHEN 'March' THEN 12
     END
 """
 
-    # -------------------------------------
-    # Template 2: Total amount by X and Y
-    # -------------------------------------
-    match = re.search(r"total\s+amount\s+by\s+(\w+).*?\b(?:and|by)\b\s*(\w+)", q)
+    # -------------------------------------------------
+    # Template 5: Compare Amount in month year apr-25 and apr-24
+    # -------------------------------------------------
+    match = re.search(r"compare\s+amount\s+in\s+month\s+year\s+(\w+)-(\d{2})\s+and\s+(\w+)-(\d{2})", q)
     if match:
-        col1, col2 = match.groups()
-        where_parts.append(where_extra) if where_extra else None
-        where_sql = " WHERE " + " AND ".join(where_parts) if where_parts else ""
-        return f"""
-SELECT
-    [{col1}], [{col2}],
-    SUM(Amount) AS TotalAmount
-FROM dbo.SalesPlanTable
-{where_sql}
-GROUP BY [{col1}], [{col2}]
-ORDER BY TotalAmount DESC
-"""
-
-    # -----------------------------
-    # Template 1: Total amount by X
-    # -----------------------------
-    match = re.search(r"total\s+amount\s+by\s+(\w+)", q)
-    if match:
-        col = match.group(1)
-        where_parts.append(where_extra) if where_extra else None
-        where_sql = " WHERE " + " AND ".join(where_parts) if where_parts else ""
-        return f"""
-SELECT
-    [{col}],
-    SUM(Amount) AS TotalAmount
-FROM dbo.SalesPlanTable
-{where_sql}
-GROUP BY [{col}]
-ORDER BY TotalAmount DESC
-"""
-
-    # ----------------------------------------
-    # Template 3: Amount by X for FY <value>
-    # ----------------------------------------
-    match = re.search(r"amount\s+by\s+(\w+).*?fy.*?(20\d{2}-\d{2}|current|previous)", q)
-    if match:
-        col, fy_hint = match.groups()
-        fy = resolve_fy(fy_hint)
-        where_parts.append(f"OrderFY = '{fy}'")
-        where_parts.append(where_extra) if where_extra else None
-        where_sql = " WHERE " + " AND ".join(where_parts) if where_parts else ""
-        return f"""
-SELECT
-    [{col}],
-    SUM(Amount) AS TotalAmount
-FROM dbo.SalesPlanTable
-{where_sql}
-GROUP BY [{col}]
-ORDER BY TotalAmount DESC
-"""
-
-
-    # --------------------------------------------
-    # Template 5: Growth between A and B (MoM or custom)
-    # --------------------------------------------
-    match = re.search(r"growth.*?\b(?:between|from)\b\s+(.+?)\s+(?:and|to)\s+(.+)", q, re.I)
-    if match:
-        val1_raw, val2_raw = match.groups()
-        val1_clean = val1_raw.strip().strip("'\"").lower()
-        val2_clean = val2_raw.strip().strip("'\"").lower()
-
-        # Map month names to standard format: 'august 2024' → 'Aug-24'
-        month_map = {
-            'january': 'Jan', 'february': 'Feb', 'march': 'Mar',
-            'april': 'Apr', 'may': 'May', 'june': 'Jun',
-            'july': 'Jul', 'august': 'Aug', 'september': 'Sep',
-            'october': 'Oct', 'november': 'Nov', 'december': 'Dec'
-        }
-
-        def normalize_month_year(text: str) -> str:
-            for full, abbr in month_map.items():
-                if full in text:
-                    # Extract year
-                    year_match = re.search(r"(\d{4})", text)
-                    if year_match:
-                        year = year_match.group(1)
-                        return f"{abbr}-{year[2:]}"
-            return None
-
-        norm1 = normalize_month_year(val1_clean)
-        norm2 = normalize_month_year(val2_clean)
-
-        if not norm1 or not norm2:
-            return None  # Let LLM handle
-
-        where_parts.append(f"[monthyear] IN ('{norm1}', '{norm2}')")
-        where_parts.append(where_extra) if where_extra else None
-        where_sql = " WHERE " + " AND ".join(where_parts) if where_parts else ""
+        mon1, yr1, mon2, yr2 = match.groups()
+        code1 = f"{mon1.strip()[:3].upper()}{yr1}"
+        code2 = f"{mon2.strip()[:3].upper()}{yr2}"
 
         return f"""
 SELECT
-    SUM(CASE WHEN [monthyear] = '{norm1}' THEN Amount ELSE 0 END) AS BaseAmount,
-    SUM(CASE WHEN [monthyear] = '{norm2}' THEN Amount ELSE 0 END) AS NewAmount,
-    (SUM(CASE WHEN [monthyear] = '{norm2}' THEN Amount ELSE 0 END) - 
-     SUM(CASE WHEN [monthyear] = '{norm1}' THEN Amount ELSE 0 END)) AS Absolute_Growth,
-    CASE 
-        WHEN SUM(CASE WHEN [monthyear] = '{norm1}' THEN Amount ELSE 0 END) > 0
-        THEN (SUM(CASE WHEN [monthyear] = '{norm2}' THEN Amount ELSE 0 END) - 
-              SUM(CASE WHEN [monthyear] = '{norm1}' THEN Amount ELSE 0 END)) * 100.0 / 
-             SUM(CASE WHEN [monthyear] = '{norm1}' THEN Amount ELSE 0 END)
-        ELSE NULL 
-    END AS Pct_Growth
+    SUM(CASE WHEN [MMMMYY] = '{code1}' THEN Amount ELSE 0 END) AS Total_{code1},
+    SUM(CASE WHEN [MMMMYY] = '{code2}' THEN Amount ELSE 0 END) AS Total_{code2}
 FROM dbo.SalesPlanTable
-{where_sql}
+WHERE [MMMMYY] IS NOT NULL 
+  AND [MMMMYY] LIKE '[A-Z][A-Z][A-Z][A-Z][0-9][0-9]'
+  AND [MMMMYY] IN ('{code1}', '{code2}')
 """
+
     # --------------------------------------------
     # Template 6: List top N by X in FY
     # --------------------------------------------
-    match = re.search(r"list\s+top\s+(\d+)\s+(\w+).*?by\s+(\w+).*?fy.*?(20\d{2}-\d{2}|current|previous)", q)
+    match = re.search(r"list\s+top\s+(\d+)\s+(.+?)\s+by\s+(.+?)(?:\s+in\s+fy|\s+for\s+fy)?", q)
     if match:
-        n, entity, metric, fy_hint = match.groups()
-        fy = resolve_fy(fy_hint)
-        entity_col = "Customer_Name" if "customer" in entity else entity.title()
-        metric_col = "Amount" if "amount" in metric else metric.title()
+        n, entity_hint, metric_hint = match.groups()
+        entity = resolve_column(entity_hint)
+        metric = resolve_column(metric_hint) or "Amount"
+        if not entity:
+            return None
 
-        where_parts.append(f"OrderFY = '{fy}'")
-        where_parts.append(where_extra) if where_extra else None
-        where_sql = " WHERE " + " AND ".join(where_parts) if where_parts else ""
+        fy = resolve_fy_hint(q)
+        if not fy:
+            fy_match = re.search(r"(20\d{2}-\d{2})", q)
+            fy = fy_match.group(1) if fy_match else None
+            if not fy:
+                fy = "2024-25"  # fallback
 
         return f"""
 SELECT TOP {n}
-    [{entity_col}],
-    SUM([{metric_col}]) AS Total{metric_col}
+    [{entity}],
+    SUM([{metric}]) AS Total{metric}
 FROM dbo.SalesPlanTable
-{where_sql}
-GROUP BY [{entity_col}]
-ORDER BY Total{metric_col} DESC
+WHERE OrderFY = '{fy}'
+GROUP BY [{entity}]
+ORDER BY Total{metric} DESC
 """
 
-    # --------------------------------------------
-    # Template 7: Count of X by Y in FY
-    # --------------------------------------------
-    match = re.search(r"count\s+of\s+(\w+).*?by\s+(\w+).*?fy.*?(20\d{2}-\d{2}|current|previous)", q)
-    if match:
-        thing, group_col, fy_hint = match.groups()
-        fy = resolve_fy(fy_hint)
-        thing_col = "Customer_Name" if "customer" in thing else thing.title()
-
-        where_parts.append(f"OrderFY = '{fy}'")
-        where_parts.append(where_extra) if where_extra else None
-        where_sql = " WHERE " + " AND ".join(where_parts) if where_parts else ""
-
-        return f"""
-SELECT
-    [{group_col}],
-    COUNT(DISTINCT [{thing_col}]) AS Count_{thing_col}
-FROM dbo.SalesPlanTable
-{where_sql}
-GROUP BY [{group_col}]
-ORDER BY Count_{thing_col} DESC
-"""
-
-    # --------------------------------------------
-    # Template 8: In previous month
-    # --------------------------------------------
-    if "previous month" in q:
-        today = date.today()
-        print(f"[DEBUG] Today: {today}")
-        first = today.replace(day=1)
-        last_month = first - timedelta(days=1)
-        prev_month = last_month.strftime("%b-%y").replace(".", "")
-        print(f"[DEBUG] Previous month: {prev_month}")  # ← Add this
-        prev_month = (date.today().replace(day=1) - timedelta(days=1)).strftime("%b-%y").replace(".", "")
-        
-        # Case-insensitive match
-        where_parts.append(f"UPPER([monthyear]) = UPPER('{prev_month}')")
-        where_parts.append(where_extra) if where_extra else None
-        where_sql = " WHERE " + " AND ".join(where_parts) if where_parts else ""
-
-        if "count of" in q or "total amount" in q:
-            return f"""
-    SELECT
-        [DocumentNo], [OrderDate], [Customer_Name], SUM([Amount]) AS TotalAmount
-    FROM dbo.SalesPlanTable
-    {where_sql}
-    GROUP BY [DocumentNo], [OrderDate], [Customer_Name]
-    ORDER BY TRY_CONVERT(DATE, [OrderDate]) DESC
-    """
-        else:
-            return f"""
-    SELECT
-        [DocumentNo], [OrderDate], [Customer_Name], [Amount]
-    FROM dbo.SalesPlanTable
-    {where_sql}
-    ORDER BY TRY_CONVERT(DATE, [OrderDate]) DESC
-    """
-    
-    # -------------------------------------------------
-    # Template 9: Compare Amount in month year apr-25 and apr-24
-    # Uses [MMMMYY] = 'APR25', 'APR24'
-    # -------------------------------------------------
-    match = re.search(r"compare\s+amount\s+in\s+month\s+year\s+(\w+)-(\d{2})\s+and\s+(\w+)-(\d{2})", q, re.I)
-    if match:
-        mon1, yr1, mon2, yr2 = match.groups()
-        code1 = f"{mon1.strip()[:3].upper()}{yr1}"  # 'apr-25' → 'APR25'
-        code2 = f"{mon2.strip()[:3].upper()}{yr2}"
-
-        # Only include valid MMMMYY values: 3 letters + 2 digits
-        where_sql = f"""
-        WHERE [MMMMYY] IS NOT NULL 
-        AND [MMMMYY] LIKE '[A-Z][A-Z][A-Z][A-Z][0-9][0-9]'
-        AND [MMMMYY] IN ('{code1}', '{code2}')
-        """
-
-        return f"""
-    SELECT
-        SUM(CASE WHEN [MMMMYY] = '{code1}' THEN Amount ELSE 0 END) AS Total_{code1},
-        SUM(CASE WHEN [MMMMYY] = '{code2}' THEN Amount ELSE 0 END) AS Total_{code2}
-    FROM dbo.SalesPlanTable
-    {where_sql}
-    """
+    # No template matched
+    return None

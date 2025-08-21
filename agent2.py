@@ -4,6 +4,7 @@ import pyodbc
 import requests
 from dotenv import load_dotenv
 import traceback
+import json
 
 from intent_router import generate_sql as generate_sql_template
 from sql_guard import SQLGuard
@@ -113,6 +114,40 @@ Guidelines:
 - Do not use INSERT, UPDATE, DELETE, or DDL commands.
 - Do not output markdown or code fences.
 """
+# -------------- LOAD SYNONYMNS ----------------
+
+def load_synonym_map(path="synonym_map.json"):
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    
+    # Flatten for fast lookup: "sales" → "Amount"
+    word_to_col = {}
+    for col, synonyms in data["columns"].items():
+        for syn in synonyms:
+            word_to_col[syn.lower().strip()] = col
+
+    intent_map = {}
+    for intent, phrases in data["intent"].items():
+        for phrase in phrases:
+            intent_map[phrase.lower().strip()] = intent
+
+    metric_map = {}
+    for metric, phrases in data["metrics"].items():
+        for phrase in phrases:
+            metric_map[phrase.lower().strip()] = metric
+
+    return {
+        "word_to_col": word_to_col,
+        "intent_map": intent_map,
+        "metric_map": metric_map,
+        "raw": data
+    }
+
+# Load once
+SYNONYM_MAP = load_synonym_map()
+
+
+# -------------- GENERATE SQL  ----------------
 
 def generate_sql(question: str, schema_text: str) -> str:
     """Call Fireworks (or other OpenAI-compatible LLM) to generate SQL from natural language."""
