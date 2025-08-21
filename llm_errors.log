@@ -5,3 +5,43 @@
 2025-08-20 18:27:34,450 | ERROR | Invalid columns: ['CASE', 'WHEN', 'APR25', 'THEN', 'ELSE', 'END', 'Total_APR25', 'CASE', 'WHEN', 'APR24', 'THEN', 'ELSE', 'END', 'Total_APR24', 'dbo', 'SalesPlanTable', 'APR25', 'APR24']
 2025-08-20 18:36:09,437 | ERROR | Invalid columns: ['CASE', 'WHEN', 'APR25', 'THEN', 'ELSE', 'END', 'Total_APR25', 'CASE', 'WHEN', 'APR24', 'THEN', 'ELSE', 'END', 'Total_APR24', 'dbo', 'SalesPlanTable', 'APR25', 'APR24']
 2025-08-20 18:53:40,713 | ERROR | Invalid columns: ['DESC']
+2025-08-21 16:17:20,852 | WARNING | Invalid column detected: LEFT in SQL: SELECT TOP 100 CAST(LEFT(OrderFY, 4) AS INT) AS FY, SUM(Amount) AS TotalAmount FROM dbo.SalesPlanTable GROUP BY CAST(LEFT(OrderFY, 4) AS INT)
+2025-08-21 16:17:43,169 | WARNING | Invalid column detected: LEFT in SQL: SELECT TOP 100 CAST(LEFT(OrderFY, 4) AS INT), Type, SUM(Amount) AS TotalAmount FROM dbo.SalesPlanTable GROUP BY CAST(LEFT(OrderFY, 4) AS INT), Type
+2025-08-21 16:18:05,075 | WARNING | Invalid column detected: 2023-24 in SQL: 
+SELECT
+    SUM(CASE WHEN OrderFY = '2023-24' THEN Amount ELSE 0 END) AS [2023-24],
+    SUM(CASE WHEN OrderFY = '2024-25' THEN Amount ELSE 0 END) AS [2024-25]
+FROM dbo.SalesPlanTable
+WHERE OrderFY IN ('2023-24', '2024-25')
+
+2025-08-21 16:18:24,779 | WARNING | Invalid column detected: DESC in SQL: 
+SELECT TOP 10
+    [Customer_Name],
+    SUM([Amount]) AS TotalAmount
+FROM dbo.SalesPlanTable
+
+GROUP BY [Customer_Name]
+ORDER BY TotalAmount DESC
+
+2025-08-21 16:18:38,822 | WARNING | Invalid column detected: Date in SQL: 
+SELECT
+    [DocumentNo], [Date], [Customer_Name]
+FROM dbo.SalesPlanTable
+
+ORDER BY OrderDate DESC
+
+2025-08-21 16:18:46,809 | WARNING | Invalid column detected: DESC in SQL: 
+SELECT
+    [OrderFY],
+    SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+
+GROUP BY [OrderFY]
+ORDER BY TotalAmount DESC
+
+2025-08-21 16:18:53,177 | WARNING | Invalid column detected: DISTINCT in SQL: 
+SELECT
+    COUNT(DISTINCT [DocumentNo]) AS Count_DocumentNo
+FROM dbo.SalesPlanTable
+
+

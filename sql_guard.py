@@ -98,59 +98,70 @@ class SQLGuard:
 
     def validate_sql(self, sql: str) -> bool:
         """
-        Final safety check: only allow safe, valid SQL.
+        Validate only real column references.
+        Skip: keywords, strings, numbers, functions, aliases.
         """
         if not sql:
             return False
 
         # Remove comments
-        cleaned = re.sub(r"--.*?$|/\*.*?\*/", "", sql, flags=re.MULTILINE | re.DOTALL)
-        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        sql_no_comment = re.sub(r"--.*?$|/\*.*?\*/", "", sql, flags=re.MULTILINE | re.DOTALL)
+        # Remove strings
+        sql_clean = re.sub(r"'[^']*'", "", sql_no_comment)
+        sql_clean = re.sub(r'"[^"]*"', "", sql_clean)
 
-        # Must be SELECT
-        if not cleaned.upper().lstrip().startswith("SELECT"):
-            logger.warning(f"Blocked non-SELECT: {sql}")
-            return False
+        # Common SQL keywords (add more if needed)
+        SQL_KEYWORDS = {
+            "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "TOP", "AS",
+            "SUM", "COUNT", "AVG", "MIN", "MAX", "CASE", "WHEN", "THEN", "ELSE", "END",
+            "AND", "OR", "IN", "LIKE", "IS", "NULL", "NOT", "UNION", "OVER", "PARTITION",
+            "JOIN", "ON", "USING", "WITH", "INTO", "CAST", "INT", "VARCHAR", "DATE",
+            "OVER", "PARTITION", "RANK", "DENSE_RANK", "ROW_NUMBER"
+        }
 
-        # Block write operations
-        write_keywords = ("insert", "update", "delete", "alter", "drop", "create", "merge", "exec", "truncate")
-        if any(kw in cleaned.lower() for kw in write_keywords):
-            logger.warning(f"Blocked write operation: {sql}")
-            return False
-
-        # Extract column references and validate
-        # Skip: keywords, strings, numbers
-        no_strings = re.sub(r"'[^']*'", "", sql)
-        no_dbl_strings = re.sub(r'"[^"]*"', "", no_strings)
-        tokens = re.finditer(r"\[\s*([^\]]+)\s*\]|\b([a-zA-Z_][\w]*)\b", no_dbl_strings)
+        # Find all [col] or bare col, but skip keywords and function calls
+        tokens = re.finditer(r"\[\s*([^\]]+)\s*\]|\b([a-zA-Z_][\w]*)\b", sql_clean)
+        invalid_columns = []
 
         for match in tokens:
-            inner = match.group(1) or match.group(2)
-            inner_clean = inner.strip()
+            inner = (match.group(1) or match.group(2)).strip()
 
-            # Skip SQL keywords
-            if inner_clean.upper() in {
-                "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "TOP",
-                "SUM", "COUNT", "AVG", "MIN", "MAX", "CAST", "INT", "AS",
-                "AND", "OR", "IN", "LIKE", "IS", "NULL", "NOT", "UNION",
-                "CASE", "WHEN", "THEN", "ELSE", "END", "OVER", "PARTITION",
-                "JOIN", "ON", "USING", "WITH", "INTO", "WHEN", "THEN", "OVER"
-            }:
+            # Skip if it's a keyword
+            if inner.upper() in SQL_KEYWORDS:
                 continue
 
-            # Skip table/schema
-            if inner_clean.lower() in {"dbo", "salesplantable"}:
+            # Skip if it's a table/schema
+            if inner.lower() in {"dbo", "salesplantable", "salesplantable"}:
                 continue
 
-            # Skip if after AS (alias)
-            if re.search(rf"\bAS\s+{re.escape(inner_clean)}\b", sql, re.I):
+            # Skip if it's an alias (after AS)
+            if re.search(rf"\bAS\s+{re.escape(inner)}\b", sql, re.I):
+                continue
+
+            # Skip if it's a function argument (e.g., SUM(col), CAST(col AS INT))
+            if re.search(rf"\b(CAST|SUM|COUNT|AVG|MIN|MAX|ROUND)\s*\(\s*{re.escape(inner)}", sql, re.I):
+                continue
+
+            # Skip if it's a number or looks like one
+            if re.match(r"^\d+$", inner):
                 continue
 
             # Validate column
-            if (inner_clean not in self.valid_columns and 
-                f"[{inner_clean}]" not in self.valid_columns and
-                inner_clean != "*"):
-                logger.warning(f"Invalid column detected: {inner_clean} in SQL: {sql}")
-                return False
+            if (inner not in self.valid_columns and 
+                f"[{inner}]" not in self.valid_columns):
+                invalid_columns.append(inner)
+
+        if invalid_columns:
+            logger.warning(f"Invalid columns blocked: {invalid_columns} | SQL: {sql}")
+            return False
+
+        # Final: must be SELECT and safe
+        cleaned = re.sub(r"\s+", " ", sql_no_comment).strip().lower()
+        if not cleaned.lstrip().startswith("select"):
+            return False
+
+        write_keywords = ("insert", "update", "delete", "alter", "drop", "create", "merge", "exec", "truncate")
+        if any(kw in cleaned for kw in write_keywords):
+            return False
 
         return True
