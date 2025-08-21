@@ -10,6 +10,7 @@ import json
 
 from intent_router import generate_sql as generate_sql_template
 from intent_router import detect_intent  # ← Added
+from intent_router import SYNONYM_MAP
 from sql_guard import SQLGuard
 
 load_dotenv()
@@ -219,7 +220,7 @@ def main():
                 intent = detect_intent(q)
 
                 # Call LLM with context
-                raw_sql = generate_sql_with_context(q, schema_text, intent, SYNONYM_MAP["raw"])
+                raw_sql = generate_sql_with_context(q, schema_text, intent, SYNONYM_MAP)
                 print("\n--- Raw LLM Output ---")
                 print(raw_sql)
 
