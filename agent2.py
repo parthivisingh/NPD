@@ -9,7 +9,7 @@ import traceback
 import json
 
 from intent_router import generate_sql as generate_sql_template
-from intent_router import detect_intent  # ← Added
+from intent_router import detect_intent
 from intent_router import SYNONYM_MAP
 from sql_guard import SQLGuard
 
@@ -79,14 +79,33 @@ def fetch_schema_text(conn, include_schemas=("dbo",), limit_tables=50) -> str:
     lines.append("-- Note: [MMMMYY] = 'APR25', 'JUL25' — use for month-year filtering")
     return "\n".join(lines)
 
+# ---------------- DYNAMIC SYNONYM FILTERING ----------------
+def extract_relevant_synonyms(question: str, full_map: dict) -> dict:
+    """
+    Extract only the synonyms that appear in the question.
+    Reduces LLM context noise.
+    """
+    q = question.lower().strip()
+    relevant = {"columns": {}}
+
+    # Extract relevant columns
+    for col, synonyms in full_map.get("columns", {}).items():
+        if any(syn.lower().strip() in q for syn in synonyms):
+            relevant["columns"][col] = synonyms
+
+    # Optionally: add intent/metrics if needed
+    # But usually not needed — intent is already passed separately
+    return relevant
+
 # ---------------- LLM SQL GENERATION ----------------
-def generate_sql_with_context(question: str, schema_text: str, intent: str, synonym_map: dict) -> str:
+def generate_sql_with_context(question: str, schema_text: str, intent: str, full_synonym_map: dict) -> str:
     """
-    Generate SQL using LLM with rich context.
+    Generate SQL using LLM with **only relevant synonyms**.
     """
-    # Build context
-    available_columns = list(synonym_map["columns"].keys())
-    column_synonyms = synonym_map["columns"]
+    # Extract only what's mentioned
+    relevant_map = extract_relevant_synonyms(question, full_synonym_map)
+    available_columns = list(relevant_map["columns"].keys())
+    column_synonyms = relevant_map["columns"]
 
     prompt = f"""
 You are a precise SQL assistant for Microsoft SQL Server. Generate ONLY a SELECT query.
@@ -101,7 +120,7 @@ You are a precise SQL assistant for Microsoft SQL Server. Generate ONLY a SELECT
 
 ## Context
 Intent: {intent}
-Available Columns: {available_columns}
+Relevant Columns: {available_columns}
 Column Synonyms: {column_synonyms}
 Schema:
 {schema_text}
@@ -216,10 +235,10 @@ def main():
             if sql is None:
                 print("No template matched. Using LLM with context...")
 
-                # Get intent and synonym map
+                # Get intent and relevant synonyms
                 intent = detect_intent(q)
 
-                # Call LLM with context
+                # Call LLM with **only relevant synonyms**
                 raw_sql = generate_sql_with_context(q, schema_text, intent, SYNONYM_MAP)
                 print("\n--- Raw LLM Output ---")
                 print(raw_sql)
