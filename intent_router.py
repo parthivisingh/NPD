@@ -108,6 +108,74 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     q = question.lower().strip()
     
     # -------------------------------------------------
+    # Template: Total amount by month with FY and Month filter
+    # Example: "Total amount by month for FY that is current and month is April to June"
+    # -------------------------------------------------
+    if "total amount by month" in q:
+        # Detect FY: current, previous, or explicit
+        fy = None
+        if "current" in q:
+            fy = resolve_fy_hint("current")
+        elif "previous" in q:
+            fy = resolve_fy_hint("previous")
+        else:
+            fy_match = re.search(r"fy\s+(20\d{2}-\d{2})", q, re.I)
+            if fy_match:
+                fy = fy_match.group(1)
+
+        # Detect month range: "April to June"
+        month_match = re.search(r"month is (\w+) to (\w+)", q, re.I)
+        months = []
+        if month_match:
+            start, end = month_match.groups()
+            month_order = [
+                "January", "February", "March",
+                "April", "May", "June",
+                "July", "August", "September",
+                "October", "November", "December"
+            ]
+            try:
+                start_idx = month_order.index(start.title())
+                end_idx = month_order.index(end.title()) + 1
+                months = month_order[start_idx:end_idx]
+            except ValueError:
+                pass  # invalid month name
+
+        # Build WHERE
+        where_parts = []
+        if fy:
+            where_parts.append(f"OrderFY = '{fy}'")
+        if months:
+            month_list = "', '".join(months)
+            where_parts.append(f"[MonthName] IN ('{month_list}')")
+
+        where_sql = " WHERE " + " AND ".join(where_parts) if where_parts else ""
+
+        return f"""
+    SELECT
+        [MonthName],
+        SUM(Amount) AS TotalAmount
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    GROUP BY [MonthName]
+    ORDER BY 
+        CASE [MonthName]
+            WHEN 'April' THEN 1
+            WHEN 'May' THEN 2
+            WHEN 'June' THEN 3
+            WHEN 'July' THEN 4
+            WHEN 'August' THEN 5
+            WHEN 'September' THEN 6
+            WHEN 'October' THEN 7
+            WHEN 'November' THEN 8
+            WHEN 'December' THEN 9
+            WHEN 'January' THEN 10
+            WHEN 'February' THEN 11
+            WHEN 'March' THEN 12
+        END
+    """
+    
+    # -------------------------------------------------
     # Template 4: Compare Amount by month in FY A and B
     # -------------------------------------------------
     match = re.search(r"compare\s+amount\s+by\s+month\s+in\s+(.+?)\s+(?:and|vs)\s+(.+)", q)
