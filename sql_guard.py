@@ -105,14 +105,39 @@ class SQLGuard:
         sql_clean = re.sub(r"\b\d{2,}\b", "", sql_clean) # Remove numbers
         # Common SQL keywords
         SQL_KEYWORDS = {
-            "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "TOP", "AS",
-            "SUM", "COUNT", "AVG", "MIN", "MAX", "CASE", "WHEN", "THEN", "ELSE", "END",
-            "AND", "OR", "IN", "LIKE", "IS", "NULL", "NOT", "UNION", "OVER", "PARTITION",
-            "JOIN", "ON", "USING", "WITH", "INTO", "CAST", "INT", "VARCHAR", "DATE",
-            "LEFT", "RIGHT", "ISNULL", "DISTINCT", "ASC", "DESC",
-            "GRANT", "REVOKE", "OPENROWSET", "BULK", "EXECUTE", "XP_CMDSHELL"
-        }
+            # --- Core ---
+            "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "HAVING", "AS",
+            "DISTINCT", "ALL", "TOP", "OFFSET", "FETCH", "LIMIT",  # LIMIT for safety
 
+            # --- Logic ---
+            "AND", "OR", "NOT", "IN", "LIKE", "BETWEEN", "IS", "NULL", "ISNULL", "COALESCE", "CASE", "WHEN", "THEN", "ELSE", "END",
+
+            # --- Aggregation ---
+            "SUM", "COUNT", "AVG", "MIN", "MAX", "STDEV", "VAR", "GROUPING",
+
+            # --- Window Functions ---
+            "OVER", "PARTITION", "ORDER", "ROWS", "RANGE", "CURRENT ROW", "PRECEDING", "FOLLOWING",
+            "ROW_NUMBER", "RANK", "DENSE_RANK", "NTILE", "LAG", "LEAD", "FIRST_VALUE", "LAST_VALUE", "NTH_VALUE",
+
+            # --- Type & Conversion ---
+            "CAST", "CONVERT", "TRY_CAST", "TRY_CONVERT", "DATEPART", "YEAR", "MONTH", "DAY", "DATENAME",
+            "INT", "BIGINT", "DECIMAL", "NUMERIC", "FLOAT", "REAL", "VARCHAR", "NVARCHAR", "CHAR", "NCHAR", "DATE", "DATETIME", "BIT",
+
+            # --- Joins & Sets ---
+            "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "OUTER", "CROSS", "APPLY",
+            "ON", "USING", "UNION", "UNION ALL", "EXCEPT", "INTERSECT",
+
+            # --- CTE & Subqueries ---
+            "WITH", "RECURSIVE", "EXISTS", "NOT EXISTS", "ANY", "SOME", "ALL",
+
+            # --- DDL & Security (for blocking) ---
+            "INSERT", "UPDATE", "DELETE", "MERGE", "CREATE", "ALTER", "DROP", "TRUNCATE", "EXEC", "EXECUTE", 
+            "GRANT", "REVOKE", "DENY", "OPENROWSET", "BULK", "XP_CMDSHELL", "SP_OA", "INSERT INTO", "SELECT INTO",
+
+            # --- PIVOT (rare) ---
+            "PIVOT", "UNPIVOT", "FOR", "IN"
+        }
+        
         # Find all [col] or bare col
         tokens = re.finditer(r"\[\s*([^\]]+)\s*\]|\b([a-zA-Z_][\w]*)\b", sql_clean)
         invalid_columns = []
