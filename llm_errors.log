@@ -72,3 +72,66 @@ FROM dbo.SalesPlanTable
 GROUP BY [OrderFY]
 ORDER BY TotalAmount DESC
 
+2025-08-21 18:36:09,766 | WARNING | Invalid columns blocked: ['DESC'] | SQL: 
+SELECT
+    [OrderFY],
+    SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+
+GROUP BY [OrderFY]
+ORDER BY TotalAmount DESC
+
+2025-08-21 18:36:24,957 | WARNING | Invalid columns blocked: ['DESC'] | SQL: 
+SELECT
+    [OrderFY],
+    SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+
+GROUP BY [OrderFY]
+ORDER BY TotalAmount DESC
+
+2025-08-21 18:36:44,212 | WARNING | Invalid columns blocked: ['DESC'] | SQL: 
+SELECT
+    [OrderFY],
+    SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+ WHERE OrderFY = '2025-26'
+GROUP BY [OrderFY]
+ORDER BY TotalAmount DESC
+
+2025-08-21 18:37:44,028 | WARNING | Invalid columns blocked: ['DESC'] | SQL: 
+SELECT
+    [OrderFY],
+    SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+
+GROUP BY [OrderFY]
+ORDER BY TotalAmount DESC
+
+2025-08-21 19:04:43,578 | WARNING | Invalid columns blocked: ['DESC'] | SQL: 
+SELECT
+    [OrderFY],
+    SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+
+GROUP BY [OrderFY]
+ORDER BY TotalAmount DESC
+
+2025-08-21 19:16:22,176 | WARNING | Invalid columns blocked: ['DESC'] | SQL: 
+SELECT TOP 10
+    [Customer_Name],
+    SUM([Amount]) AS TotalAmount
+FROM dbo.SalesPlanTable
+
+GROUP BY [Customer_Name]
+ORDER BY TotalAmount DESC
+
+2025-08-21 19:18:00,119 | WARNING | Invalid columns blocked: ['DESC'] | SQL: 
+SELECT TOP 10
+    [Customer_Name],
+    SUM([Amount]) AS TotalAmount
+FROM dbo.SalesPlanTable
+
+GROUP BY [Customer_Name]
+ORDER BY TotalAmount DESC
+

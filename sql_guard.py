@@ -17,7 +17,6 @@ class SQLGuard:
     def __init__(self, conn):
         self.conn = conn
         self.valid_columns = self._get_valid_columns()
-        self.valid_columns_lower= {col.lower() for col in self.valid_columns}
 
     def _get_valid_columns(self) -> set:
         cur = self.conn.cursor()
@@ -32,15 +31,14 @@ class SQLGuard:
     def _fix_column_names(self, sql: str) -> str:
         """
         Fix common LLM hallucinations:
-        - [MMMYY] → [MMMMYY]
         - [ord_fy] → [OrderFY]
         - [amount] → [Amount]
         """
         fixes = {
-            r"\[\s*mmmmyy\s*\]": "[MMMMYY]",
-            r"\[\s*mmmyy\s*\]": "[MMMMYY]",
-            r"\[\s*mmmy\s*\]": "[MMMMYY]",
-            r"\[\s*mmyy\s*\]": "[MMMMYY]",
+            r"\[\s*mmmmyy\s*\]": "[monthyear]",
+            r"\[\s*mmmyy\s*\]": "[monthyear]",
+            r"\[\s*mmmy\s*\]": "[monthyear]",
+            r"\[\s*mmyy\s*\]": "[monthyear]",
             r"\[\s*ord_fy\s*\]": "[OrderFY]",
             r"\[\s*ordfy\s*\]": "[OrderFY]",
             r"\[\s*fy\s*\]": "[OrderFY]",
@@ -104,14 +102,15 @@ class SQLGuard:
         # Remove strings
         sql_clean = re.sub(r"'[^']*'", "", sql_no_comment)
         sql_clean = re.sub(r'"[^"]*"', "", sql_clean)
-
+        sql_clean = re.sub(r"\b\d{2,}\b", "", sql_clean) # Remove numbers
         # Common SQL keywords
         SQL_KEYWORDS = {
             "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "TOP", "AS",
             "SUM", "COUNT", "AVG", "MIN", "MAX", "CASE", "WHEN", "THEN", "ELSE", "END",
             "AND", "OR", "IN", "LIKE", "IS", "NULL", "NOT", "UNION", "OVER", "PARTITION",
             "JOIN", "ON", "USING", "WITH", "INTO", "CAST", "INT", "VARCHAR", "DATE",
-            "OVER", "PARTITION", "RANK", "DENSE_RANK", "ROW_NUMBER", "LEFT", "RIGHT", "ISNULL"
+            "LEFT", "RIGHT", "ISNULL", "DISTINCT", "ASC", "DESC",
+            "GRANT", "REVOKE", "OPENROWSET", "BULK", "EXECUTE", "XP_CMDSHELL"
         }
 
         # Find all [col] or bare col
@@ -133,10 +132,6 @@ class SQLGuard:
 
             # Skip if it's an alias (after AS)
             if re.search(rf"\bAS\s+{re.escape(inner)}\b", sql, re.I):
-                continue
-
-            # Skip if it's a function argument (e.g., SUM(col), CAST(col AS INT))
-            if re.search(rf"\b(CAST|SUM|COUNT|AVG|MIN|MAX|ROUND|ISNULL)\s*\(\s*{re.escape(inner)}", sql, re.I):
                 continue
 
             # Skip if it's a number

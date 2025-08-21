@@ -8,7 +8,7 @@
       "current fy", "previous fy", "that is current", "is current", "current fiscal", "previous fiscal",
       "f.y."
     ],
-    "OrderDate": ["date", "order date"],
+    "OrderDate": ["date", "Date", "order date", "Order Date"],
     "Customer_Name": [
       "Customer", "Customer Name", "Party", "Client","clients",
       "customer is", "customer name is", "for customer", "party is"

@@ -5,6 +5,16 @@ from typing import Dict, List, Optional
 from datetime import datetime, date, timedelta
 import json
 
+ORDER_BY_CANDIDATES = ["OrderDate", "Date", "Order_Date", "DocumentDate"]
+
+def has_column(conn, col: str) -> bool:
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
+        WHERE TABLE_NAME = 'SalesPlanTable' AND COLUMN_NAME = ?
+    """, col)
+    return cur.fetchone() is not None
+
 # -------------------------------
 # Load Synonym Map
 # -------------------------------
@@ -26,18 +36,21 @@ SYNONYM_MAP = load_synonym_map()
 # -------------------------------
 
 def resolve_column(text: str) -> str:
-    """
-    Resolve natural language phrase to real column name.
-    Uses synonym_map.json for lookup.
-    """
     if not text:
         return None
     text = text.lower().strip()
+    
+    # Build list of (synonym, col) and sort by length (longest first)
+    candidates = []
     for col, synonyms in SYNONYM_MAP.get("columns", {}).items():
         for syn in synonyms:
-            if syn.lower().strip() in text:
-                return col
-    return None
+            syn_clean = syn.lower().strip()
+            if re.search(rf"\b{re.escape(syn_clean)}\b", text):
+                candidates.append((syn_clean, col))
+    
+    # Sort by synonym length (longest first)
+    candidates.sort(key=lambda x: len(x[0]), reverse=True)
+    return candidates[0][1] if candidates else None
 
 def resolve_fy_hint(hint: str) -> str:
     """
@@ -282,7 +295,7 @@ ORDER BY Total{metric} DESC
     # 4. List Rows: "list of no, date, customer..."
     # -------------------------------
     if intent == "list_rows":
-        cols = re.findall(r"(no|date|customer|amount|total amount)", q_clean, re.I)
+        cols = re.findall(r"(no|date|customer|amount)", q_clean, re.I)
         mapped_cols = [resolve_column(c) or c.title() for c in cols]
         if not mapped_cols:
             return None
@@ -291,25 +304,31 @@ ORDER BY Total{metric} DESC
         filters = extract_filters(q_clean)
         where_sql = " WHERE " + " AND ".join(filters) if filters else ""
 
-        # If "total amount", aggregate
         if "total amount" in q_clean:
+            # Aggregate by non-Amount columns
             group_cols = ", ".join(f"[{c}]" for c in mapped_cols if c != "Amount")
+            if not group_cols:
+                return f"""
+    SELECT
+        SUM(Amount) AS TotalAmount
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    """
             return f"""
-SELECT
-    {select_cols}, SUM(Amount) AS TotalAmount
-FROM dbo.SalesPlanTable
-{where_sql}
-GROUP BY {group_cols}
-ORDER BY TotalAmount DESC
-"""
+    SELECT
+        {select_cols}, SUM(Amount) AS TotalAmount
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    GROUP BY {group_cols}
+    ORDER BY TotalAmount DESC
+    """
         else:
             return f"""
-SELECT
-    {select_cols}
-FROM dbo.SalesPlanTable
-{where_sql}
-ORDER BY OrderDate DESC
-"""
+    SELECT
+        {select_cols}
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    """
 
     # -------------------------------
     # 5. Aggregate: "Total amount by FY and type"

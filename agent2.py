@@ -48,7 +48,9 @@ def get_connection():
         conn = pyodbc.connect(conn_str)
         return conn
     except Exception as e:
-        raise RuntimeError(f"DB connect failed: {e}\nConnStr={conn_str}")
+        # Scrub password
+        redacted = re.sub(r"PWD=[^;]+", "PWD=***", conn_str)
+        raise RuntimeError(f"DB connect failed: {e}\nConnStr={redacted}")
 
 # ---------------- SCHEMA INTROSPECTION ----------------
 def fetch_schema_text(conn, include_schemas=("dbo",), limit_tables=50) -> str:
@@ -57,7 +59,7 @@ def fetch_schema_text(conn, include_schemas=("dbo",), limit_tables=50) -> str:
     cur.execute(f"""
         SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE
         FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA IN ({placeholders})
+        WHERE TABLE_SCHEMA IN ({placeholders}) AND TABLE_NAME = 'SalesPlanTable'
         ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION
     """, include_schemas)
     rows = cur.fetchall()
@@ -76,7 +78,7 @@ def fetch_schema_text(conn, include_schemas=("dbo",), limit_tables=50) -> str:
     # Add hint for LLM
     lines.append("")
     lines.append("-- Note: OrderFY is VARCHAR(10) containing year like '2023'. Use CAST(OrderFY AS INT) to treat as number.")
-    lines.append("-- Note: [MMMMYY] = 'APR25', 'JUL25' — use for month-year filtering")
+    lines.append("-- Note: [monthyear] = 'Apr-24', 'May-25' — use for month-year filtering")
     return "\n".join(lines)
 
 # ---------------- DYNAMIC SYNONYM FILTERING ----------------
@@ -115,6 +117,7 @@ You are a precise SQL assistant for Microsoft SQL Server. Generate ONLY a SELECT
 - Use SELECT to answer the question.
 - Use ONLY column names from the schema. Do NOT invent or modify column names.
 - Wrap column names in [ ] if they have spaces or are keywords.
+- Always wrap string values in single quotes, e.g., '2023-24', 'Apr-25'
 - Do NOT use INSERT, UPDATE, DELETE, or DDL.
 - Do NOT output markdown or code fences.
 
@@ -183,7 +186,7 @@ def is_safe_sql(sql: str) -> bool:
     if not cleaned.lstrip(" (").startswith("select"):
         return False
 
-    WRITE_KEYWORDS = ("insert", "update", "delete", "alter", "drop", "truncate", "create", "merge", "exec")
+    WRITE_KEYWORDS = ("insert", "update", "delete", "alter", "drop", "truncate", "create", "merge", "exec", "into")
     return not any(kw in cleaned for kw in WRITE_KEYWORDS)
 
 # ---------------- EXECUTION ----------------
