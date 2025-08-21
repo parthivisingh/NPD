@@ -106,26 +106,36 @@ def resolve_fy_hint(q: str) -> str:
 
 def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     q = question.lower().strip()
-
-    # -----------------------------
-    # Template 1: Total amount by X
-    # -----------------------------
-    match = re.search(r"total\s+amount\s+by\s+(.+)", q)
+    
+    # -------------------------------------------------
+    # Template 4: Compare Amount by month in FY A and B
+    # -------------------------------------------------
+    match = re.search(r"compare\s+amount\s+by\s+month\s+in\s+(.+?)\s+(?:and|vs)\s+(.+)", q)
     if match:
-        col_hint = match.group(1).strip()
-        col = resolve_column(col_hint)
-        if not col:
-            return None  # fallback
+        fy1_raw, fy2_raw = match.groups()
+        fy1 = fy1_raw.strip().strip("'\"")
+        fy2 = fy2_raw.strip().strip("'\"")
+
+        if not re.match(r"20\d{2}-\d{2}", fy1) or not re.match(r"20\d{2}-\d{2}", fy2):
+            return None
 
         return f"""
-SELECT
-    [{col}],
-    SUM(Amount) AS TotalAmount
+SELECT 
+    [MonthName],
+    SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END) AS [{fy1}],
+    SUM(CASE WHEN OrderFY = '{fy2}' THEN Amount ELSE 0 END) AS [{fy2}]
 FROM dbo.SalesPlanTable
-GROUP BY [{col}]
-ORDER BY TotalAmount DESC
+WHERE OrderFY IN ('{fy1}', '{fy2}')
+GROUP BY [MonthName]
+ORDER BY 
+    CASE [MonthName]
+        WHEN 'April' THEN 1 WHEN 'May' THEN 2 WHEN 'June' THEN 3
+        WHEN 'July' THEN 4 WHEN 'August' THEN 5 WHEN 'September' THEN 6
+        WHEN 'October' THEN 7 WHEN 'November' THEN 8 WHEN 'December' THEN 9
+        WHEN 'January' THEN 10 WHEN 'February' THEN 11 WHEN 'March' THEN 12
+    END
 """
-
+    
     # -------------------------------------
     # Template 2: Total amount by X and Y
     # -------------------------------------
@@ -145,6 +155,49 @@ FROM dbo.SalesPlanTable
 GROUP BY [{col1}], [{col2}]
 ORDER BY TotalAmount DESC
 """
+
+    # -------------------------------------------------
+    # Template 1A: Total amount by X in FY <value>
+    # Example: "Total amount by month in FY 2025-26"
+    # -------------------------------------------------
+    match = re.search(r"total\s+amount\s+by\s+(.+?)\s+(?:in|for)?\s+fy\s+(20\d{2}-\d{2})", q, re.I)
+    if match:
+        col_hint, fy = match.groups()
+        col = resolve_column(col_hint.strip())
+        if not col:
+            return None
+
+        return f"""
+    SELECT
+        [{col}],
+        SUM(Amount) AS TotalAmount
+    FROM dbo.SalesPlanTable
+    WHERE OrderFY = '{fy}'
+    GROUP BY [{col}]
+    ORDER BY TotalAmount DESC
+    """
+
+    # -------------------------------------------------
+    # Template 1B: Total amount by X (no FY)
+    # Example: "Total amount by month"
+    # -------------------------------------------------
+    match = re.search(r"total\s+amount\s+by\s+(.+)", q)
+    if match:
+        col_hint = match.group(1).strip()
+        col = resolve_column(col_hint)
+        if not col:
+            return None
+
+        return f"""
+    SELECT
+        [{col}],
+        SUM(Amount) AS TotalAmount
+    FROM dbo.SalesPlanTable
+    GROUP BY [{col}]
+    ORDER BY TotalAmount DESC
+    """
+
+    
 
     # ----------------------------------------
     # Template 3: Amount by X for FY <value>
@@ -174,34 +227,6 @@ GROUP BY [{col}]
 ORDER BY TotalAmount DESC
 """
 
-    # -------------------------------------------------
-    # Template 4: Compare Amount by month in FY A and B
-    # -------------------------------------------------
-    match = re.search(r"compare\s+amount\s+by\s+month\s+in\s+(.+?)\s+(?:and|vs)\s+(.+)", q)
-    if match:
-        fy1_raw, fy2_raw = match.groups()
-        fy1 = fy1_raw.strip().strip("'\"")
-        fy2 = fy2_raw.strip().strip("'\"")
-
-        if not re.match(r"20\d{2}-\d{2}", fy1) or not re.match(r"20\d{2}-\d{2}", fy2):
-            return None
-
-        return f"""
-SELECT 
-    [MonthName],
-    SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END) AS [{fy1}],
-    SUM(CASE WHEN OrderFY = '{fy2}' THEN Amount ELSE 0 END) AS [{fy2}]
-FROM dbo.SalesPlanTable
-WHERE OrderFY IN ('{fy1}', '{fy2}')
-GROUP BY [MonthName]
-ORDER BY 
-    CASE [MonthName]
-        WHEN 'April' THEN 1 WHEN 'May' THEN 2 WHEN 'June' THEN 3
-        WHEN 'July' THEN 4 WHEN 'August' THEN 5 WHEN 'September' THEN 6
-        WHEN 'October' THEN 7 WHEN 'November' THEN 8 WHEN 'December' THEN 9
-        WHEN 'January' THEN 10 WHEN 'February' THEN 11 WHEN 'March' THEN 12
-    END
-"""
 
     # -------------------------------------------------
     # Template 5: Compare Amount in month year apr-25 and apr-24
