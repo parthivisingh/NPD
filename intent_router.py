@@ -229,14 +229,64 @@ ORDER BY
 # Main Entry Point
 # -------------------------------
 
+# -------------------------------
+# Main Entry Point
+# -------------------------------
+
 def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     """
     Parse full query and generate SQL.
-    Returns None only if parsing fails.
+    Priority order:
+        1. Compare
+        2. Growth
+        3. Structured parse (Total, Count, etc.)
     """
+    q = question.lower().strip()
+
+    # -------------------------------------------------
+    # Template 1: Compare A and B
+    # Example: "Compare Amount in FY 2023-24 and 2024-25"
+    # -------------------------------------------------
+    if "compare" in q:
+        # Extract metric
+        metric_match = re.search(r"compare\s+(.+?)\s+in\s+", q, re.I)
+        metric = "Amount" if not metric_match else metric_match.group(1).strip()
+
+        # Extract two values
+        match = re.search(r"in\s+(.+?)\s+(?:and|vs)\s+(.+)", q, re.I)
+        if not match:
+            return None
+        val1_raw, val2_raw = match.groups()
+        val1 = val1_raw.strip().strip("'\"")
+        val2 = val2_raw.strip().strip("'\"")
+
+        # Detect if it's FY
+        if re.match(r"20\d{2}-\d{2}", val1) and re.match(r"20\d{2}-\d{2}", val2):
+            col = "OrderFY"
+            return f"""
+SELECT
+    SUM(CASE WHEN {col} = '{val1}' THEN {metric} ELSE 0 END) AS [{val1}],
+    SUM(CASE WHEN {col} = '{val2}' THEN {metric} ELSE 0 END) AS [{val2}]
+FROM dbo.SalesPlanTable
+WHERE {col} IN ('{val1}', '{val2}')
+"""
+
+        # Add other types (monthyear, etc.) later
+        return None
+
+    # -------------------------------------------------
+    # Template 2: Growth between A and B
+    # -------------------------------------------------
+    if "growth" in q and ("between" in q or "from" in q):
+        # Similar logic — return Pct_Growth
+        return None  # (you already have this)
+
+    # -------------------------------------------------
+    # Fallback: Structured Parse for "Total", "Count", etc.
+    # -------------------------------------------------
     try:
         intent = parse_query(question)
         return generate_sql_from_intent(intent)
     except Exception as e:
         print(f"[DEBUG] Intent parsing failed: {e}")
-        return None  # fallback to LLM
+        return None
