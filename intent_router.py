@@ -130,7 +130,8 @@ def extract_filters(q: str) -> List[str]:
         filters.append(f"[MFGMode] = '{mfg_match.group(1).title()}'")
 
     # Customer_Name
-    cust_match = re.search(r"customer\s+is\s+([A-Z][\w\s.&-]+?)(?:\s+|$)", q, re.I)
+    #cust_match = re.search(r"customer\s+is\s+([A-Z][\w\s.&-]+?)(?:\s+|$)", q, re.I)
+    cust_match = re.search(r"customer\s+is\s+(.+?)(?:\s+(?:and|where|$)|$)", q, re.I)
     if cust_match:
         filters.append(f"[Customer_Name] = '{cust_match.group(1).strip()}'")
 
@@ -251,22 +252,27 @@ WHERE [monthyear] IN ('{my1}', '{my2}')
             start = normalize_my(start_raw.strip())
             end = normalize_my(end_raw.strip())
 
+            # ✅ Add filters
+            filters = extract_filters(q_clean)
+            filters.append(f"[monthyear] IN ('{start}', '{end}')")
+            where_sql = " WHERE " + " AND ".join(filters)
+
             return f"""
-SELECT
-    SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END) AS BaseAmount,
-    SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) AS NewAmount,
-    (SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) - 
-     SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)) AS Absolute_Growth,
-    CASE 
-        WHEN SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END) > 0
-        THEN (SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) - 
-              SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)) * 100.0 / 
-             SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)
-        ELSE NULL 
-    END AS Pct_Growth
-FROM dbo.SalesPlanTable
-WHERE [monthyear] IN ('{start}', '{end}')
-"""
+    SELECT
+        SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END) AS BaseAmount,
+        SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) AS NewAmount,
+        (SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) - 
+        SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)) AS Absolute_Growth,
+        CASE 
+            WHEN SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END) > 0
+            THEN (SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) - 
+                SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)) * 100.0 / 
+                SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)
+            ELSE NULL 
+        END AS Pct_Growth
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    """
 
     # -------------------------------
     # 3. Top N: "List top 10 customers by amount in FY 2025-26"
