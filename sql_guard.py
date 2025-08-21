@@ -17,16 +17,17 @@ class SQLGuard:
     def __init__(self, conn):
         self.conn = conn
         self.valid_columns = self._get_valid_columns()
+        self.valid_columns_lower= {col.lower() for col in self.valid_columns}
 
     def _get_valid_columns(self) -> set:
-        """Fetch real column names as a set for fast lookup."""
         cur = self.conn.cursor()
         cur.execute("""
             SELECT COLUMN_NAME 
             FROM INFORMATION_SCHEMA.COLUMNS 
             WHERE TABLE_NAME = 'SalesPlanTable'
         """)
-        return {row[0] for row in cur.fetchall()}
+        # Normalize to lowercase
+        return {row[0].lower() for row in cur.fetchall()}
 
     def _fix_column_names(self, sql: str) -> str:
         """
@@ -63,21 +64,15 @@ class SQLGuard:
         return sql
 
     def _fix_cast_fy(self, sql: str) -> str:
-        """Fix unsafe CAST(OrderFY AS INT) → safe LEFT(OrderFY, 4)"""
-        if "CAST" in sql.upper() and "OrderFY" in sql:
-            return re.sub(
-                r"CAST\s*\(\s*[^)]*?OrderFY[^)]*?AS\s+INT\s*\)",
-                r"CAST(LEFT(OrderFY, 4) AS INT)",
-                sql,
-                flags=re.IGNORECASE
-            )
-        return sql
-
-    def _fix_top_placement(self, sql: str) -> str:
-        """Ensure TOP 100 is right after SELECT."""
-        if "TOP" not in sql.upper():
-            return re.sub(r"^SELECT\b", "SELECT TOP 100", sql, flags=re.IGNORECASE)
-        return sql
+        """
+        Fix CAST(OrderFY AS INT) → CAST(LEFT(OrderFY, 4) AS INT)
+        """
+        return re.sub(
+            r"CAST\s*\(\s*\[?OrderFY\]?\s+AS\s+INT\s*\)",
+            r"CAST(LEFT(OrderFY, 4) AS INT)",
+            sql,
+            flags=re.IGNORECASE
+        )
 
     def repair_sql(self, sql: str) -> str:
         """
@@ -86,8 +81,7 @@ class SQLGuard:
         """
         fixes = [
             self._fix_column_names,
-            self._fix_cast_fy,
-            self._fix_top_placement,
+            self._fix_cast_fy
         ]
         for fix in fixes:
             try:
@@ -100,6 +94,7 @@ class SQLGuard:
         """
         Validate only real column references.
         Skip: keywords, strings, numbers, functions, aliases.
+        Case-insensitive.
         """
         if not sql:
             return False
@@ -110,28 +105,30 @@ class SQLGuard:
         sql_clean = re.sub(r"'[^']*'", "", sql_no_comment)
         sql_clean = re.sub(r'"[^"]*"', "", sql_clean)
 
-        # Common SQL keywords (add more if needed)
+        # Common SQL keywords
         SQL_KEYWORDS = {
             "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "TOP", "AS",
             "SUM", "COUNT", "AVG", "MIN", "MAX", "CASE", "WHEN", "THEN", "ELSE", "END",
             "AND", "OR", "IN", "LIKE", "IS", "NULL", "NOT", "UNION", "OVER", "PARTITION",
             "JOIN", "ON", "USING", "WITH", "INTO", "CAST", "INT", "VARCHAR", "DATE",
-            "OVER", "PARTITION", "RANK", "DENSE_RANK", "ROW_NUMBER"
+            "OVER", "PARTITION", "RANK", "DENSE_RANK", "ROW_NUMBER", "LEFT", "RIGHT", "ISNULL"
         }
 
-        # Find all [col] or bare col, but skip keywords and function calls
+        # Find all [col] or bare col
         tokens = re.finditer(r"\[\s*([^\]]+)\s*\]|\b([a-zA-Z_][\w]*)\b", sql_clean)
         invalid_columns = []
 
         for match in tokens:
             inner = (match.group(1) or match.group(2)).strip()
+            if not inner:
+                continue
 
             # Skip if it's a keyword
             if inner.upper() in SQL_KEYWORDS:
                 continue
 
             # Skip if it's a table/schema
-            if inner.lower() in {"dbo", "salesplantable", "salesplantable"}:
+            if inner.lower() in {"dbo", "salesplantable"}:
                 continue
 
             # Skip if it's an alias (after AS)
@@ -139,18 +136,22 @@ class SQLGuard:
                 continue
 
             # Skip if it's a function argument (e.g., SUM(col), CAST(col AS INT))
-            if re.search(rf"\b(CAST|SUM|COUNT|AVG|MIN|MAX|ROUND)\s*\(\s*{re.escape(inner)}", sql, re.I):
+            if re.search(rf"\b(CAST|SUM|COUNT|AVG|MIN|MAX|ROUND|ISNULL)\s*\(\s*{re.escape(inner)}", sql, re.I):
                 continue
 
-            # Skip if it's a number or looks like one
+            # Skip if it's a number
             if re.match(r"^\d+$", inner):
                 continue
 
-            # Validate column
-            if (inner not in self.valid_columns and 
-                f"[{inner}]" not in self.valid_columns):
+            # Case-insensitive validation
+            inner_lower = inner.lower()
+            bracketed_lower = f"[{inner}]".lower()
+
+            if (inner_lower not in self.valid_columns and 
+                bracketed_lower not in self.valid_columns):
                 invalid_columns.append(inner)
 
+        # Block if any invalid columns found
         if invalid_columns:
             logger.warning(f"Invalid columns blocked: {invalid_columns} | SQL: {sql}")
             return False

@@ -45,3 +45,30 @@ SELECT
 FROM dbo.SalesPlanTable
 
 
+2025-08-21 17:54:46,264 | WARNING | Invalid columns blocked: ['DESC'] | SQL: 
+SELECT
+    [OrderFY],
+    SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+
+GROUP BY [OrderFY]
+ORDER BY TotalAmount DESC
+
+2025-08-21 17:54:59,875 | WARNING | Invalid columns blocked: ['DESC'] | SQL: 
+SELECT
+    [OrderFY],
+    SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+
+GROUP BY [OrderFY]
+ORDER BY TotalAmount DESC
+
+2025-08-21 17:58:20,938 | WARNING | Invalid columns blocked: ['DESC'] | SQL: 
+SELECT
+    [OrderFY],
+    SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+
+GROUP BY [OrderFY]
+ORDER BY TotalAmount DESC
+

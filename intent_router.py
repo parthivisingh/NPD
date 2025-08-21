@@ -166,20 +166,18 @@ def detect_intent(q: str) -> str:
 # -------------------------------
 
 def extract_entities(q: str) -> List[str]:
-    """
-    Extract columns after 'by X and Y' or 'by X, Y'
-    """
-    by_match = re.search(r"by\s+([\w\s\-]+?)(?:\s+(?:and|for|in|,|$))", q, re.I)
+    # Match "by X" up to comma, "and", or end
+    by_match = re.search(r"by\s+([^,;]+?)(?:\s*(?:,|and|$))", q, re.I)
     if not by_match:
         return []
-    parts = re.split(r"\s+and\s+|\s*,\s+", by_match.group(1).strip())
+    text = by_match.group(1).strip()
+    parts = re.split(r"\s+and\s+|\s*,\s+", text)
     entities = []
     for part in parts:
         col = resolve_column(part.strip())
         if col:
             entities.append(col)
     return entities
-
 # -------------------------------
 # Main SQL Generator
 # -------------------------------
@@ -318,6 +316,13 @@ ORDER BY OrderDate DESC
     # -------------------------------
     if intent in ["total", "aggregate"]:
         entities = extract_entities(q_clean)
+        if not entities:
+            # Fallback: try direct resolve
+            match = re.search(r"by\s+([\w\s]+?)(?:\s+(?:for|in|$))", q_clean)
+            if match:
+                col = resolve_column(match.group(1).strip())
+                if col:
+                    entities = [col]
         if not entities:
             return None
 
