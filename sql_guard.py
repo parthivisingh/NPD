@@ -17,7 +17,6 @@ class SQLGuard:
     def __init__(self, conn):
         self.conn = conn
         self.valid_columns = self._get_valid_columns()
-        self.column_fix_map = self._build_column_fix_map()
 
     def _get_valid_columns(self) -> set:
         """Fetch real column names as a set for fast lookup."""
@@ -29,81 +28,42 @@ class SQLGuard:
         """)
         return {row[0] for row in cur.fetchall()}
 
-    def _build_column_fix_map(self) -> dict:
-        """
-        Map common LLM mistakes to correct column names.
-        Keys are typos; values are correct column names.
-        """
-        return {
-            # MMMYY variants
-            "mmmmyy": "MMMMYY",
-            "mmmyy": "MMMMYY",
-            "mmmy": "MMMMYY",
-            "mmyy": "MMMMYY",
-            "my": "monthyear",
-            # OrderFY
-            "ord_fy": "OrderFY",
-            "orderfy": "OrderFY",
-            "fy": "OrderFY",
-            "ordfy": "OrderFY",
-            # MFGMode
-            "mfg": "MFGMode",
-            "mfgmode": "MFGMode",
-            "manufacturingmode": "MFGMode",
-            # Type
-            "doctype": "Type",
-            "ordertype": "Type",
-            # Amount
-            "amt": "Amount",
-            "value": "Amount",
-            # Date
-            "orderdate": "OrderDate",
-            # Misc
-            "mpcode": "MPCODE",
-            "docno": "DocumentNo",
-            "no": "DocumentNo",
-            "qty": "Quantity",
-            "quantity": "Quantity"
-        }
-
-    def _resolve_column(self, col: str) -> str:
-        """Resolve a column name typo to the correct one."""
-        clean = re.sub(r"[\[\]\s]", "", col).lower()
-        return self.column_fix_map.get(clean, col)
-
     def _fix_column_names(self, sql: str) -> str:
-        """Fix known column name typos (e.g., [MMMYY] → [MMMMYY])."""
+        """
+        Fix common LLM hallucinations:
+        - [MMMYY] → [MMMMYY]
+        - [ord_fy] → [OrderFY]
+        - [amount] → [Amount]
+        """
+        fixes = {
+            r"\[\s*mmmmyy\s*\]": "[MMMMYY]",
+            r"\[\s*mmmyy\s*\]": "[MMMMYY]",
+            r"\[\s*mmmy\s*\]": "[MMMMYY]",
+            r"\[\s*mmyy\s*\]": "[MMMMYY]",
+            r"\[\s*ord_fy\s*\]": "[OrderFY]",
+            r"\[\s*ordfy\s*\]": "[OrderFY]",
+            r"\[\s*fy\s*\]": "[OrderFY]",
+            r"\[\s*amount\s*\]": "[Amount]",
+            r"\[\s*value\s*\]": "[Amount]",
+            r"\[\s*sales\s*\]": "[Amount]",
+            r"\[\s*customer\s*\]": "[Customer_Name]",
+            r"\[\s*cust\s*\]": "[Customer_Name]",
+            r"\[\s*mfg\s*\]": "[MFGMode]",
+            r"\[\s*mode\s*\]": "[MFGMode]",
+            r"\[\s*type\s*\]": "[Type]",
+            r"\[\s*doc\s*type\s*\]": "[Type]",
+            r"\[\s*month\s*year\s*\]": "[monthyear]",
+            r"\[\s*my\s*\]": "[monthyear]",
+        }
         original = sql
-        changed = False
-
-        # Match [col] or bare col, but skip keywords
-        tokens = re.finditer(r"\[\s*([^\]]+)\s*\]|\b([a-zA-Z_][\w]*)\b", sql)
-        for match in reversed(list(tokens)):
-            inner = match.group(1) or match.group(2)
-
-            # Skip SQL keywords
-            if inner.upper() in {
-                "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "TOP",
-                "SUM", "COUNT", "AVG", "MIN", "MAX", "CAST", "INT", "AS",
-                "AND", "OR", "IN", "LIKE", "IS", "NULL", "NOT", "UNION",
-                "CASE", "WHEN", "THEN", "ELSE", "END", "OVER", "PARTITION",
-                "JOIN", "ON", "USING", "WITH", "INTO", "WHEN", "THEN"
-            }:
-                continue
-
-            fixed = self._resolve_column(inner)
-            if fixed != inner:
-                start, end = match.span()
-                replacement = f"[{fixed}]"
-                sql = sql[:start] + replacement + sql[end:]
-                changed = True
-
-        if changed:
+        for pattern, replacement in fixes.items():
+            sql = re.sub(pattern, replacement, sql, flags=re.IGNORECASE)
+        if sql != original:
             logger.info(f"Fixed column names:\nOriginal: {original}\nFixed: {sql}")
         return sql
 
     def _fix_cast_fy(self, sql: str) -> str:
-        """Fix CAST(OrderFY AS INT) → LEFT(OrderFY, 4) for '2024-25' format."""
+        """Fix unsafe CAST(OrderFY AS INT) → safe LEFT(OrderFY, 4)"""
         if "CAST" in sql.upper() and "OrderFY" in sql:
             return re.sub(
                 r"CAST\s*\(\s*[^)]*?OrderFY[^)]*?AS\s+INT\s*\)",
@@ -115,21 +75,16 @@ class SQLGuard:
 
     def _fix_top_placement(self, sql: str) -> str:
         """Ensure TOP 100 is right after SELECT."""
-        if "TOP" in sql.upper():
-            sql = re.sub(r"\s+TOP\s+\d+", "", sql, flags=re.IGNORECASE)
-        return re.sub(r"^SELECT\b", "SELECT TOP 100", sql, flags=re.IGNORECASE)
-
-    def _fix_double_brackets(self, sql: str) -> str:
-        """Fix [[Amount]] → [Amount]"""
-        return re.sub(r"\[\[([^\]]+)\]\]", r"[\1]", sql)
+        if "TOP" not in sql.upper():
+            return re.sub(r"^SELECT\b", "SELECT TOP 100", sql, flags=re.IGNORECASE)
+        return sql
 
     def repair_sql(self, sql: str) -> str:
         """
         Apply minimal, safe fixes.
-        Order matters: fix brackets → columns → CAST → TOP
+        Order: brackets → columns → CAST → TOP
         """
         fixes = [
-            self._fix_double_brackets,
             self._fix_column_names,
             self._fix_cast_fy,
             self._fix_top_placement,
@@ -143,22 +98,59 @@ class SQLGuard:
 
     def validate_sql(self, sql: str) -> bool:
         """
-        Light validation: only check for safety, not correctness.
-        Let templates handle correctness.
+        Final safety check: only allow safe, valid SQL.
         """
         if not sql:
             return False
 
         # Remove comments
         cleaned = re.sub(r"--.*?$|/\*.*?\*/", "", sql, flags=re.MULTILINE | re.DOTALL)
-        cleaned = re.sub(r"\s+", " ", cleaned).strip().lower()
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
-        if not cleaned.startswith("select"):
+        # Must be SELECT
+        if not cleaned.upper().lstrip().startswith("SELECT"):
+            logger.warning(f"Blocked non-SELECT: {sql}")
             return False
 
         # Block write operations
-        write_keywords = ("insert", "update", "delete", "alter", "drop", "create", "merge", "exec")
-        if any(kw in cleaned for kw in write_keywords):
+        write_keywords = ("insert", "update", "delete", "alter", "drop", "create", "merge", "exec", "truncate")
+        if any(kw in cleaned.lower() for kw in write_keywords):
+            logger.warning(f"Blocked write operation: {sql}")
             return False
+
+        # Extract column references and validate
+        # Skip: keywords, strings, numbers
+        no_strings = re.sub(r"'[^']*'", "", sql)
+        no_dbl_strings = re.sub(r'"[^"]*"', "", no_strings)
+        tokens = re.finditer(r"\[\s*([^\]]+)\s*\]|\b([a-zA-Z_][\w]*)\b", no_dbl_strings)
+
+        for match in tokens:
+            inner = match.group(1) or match.group(2)
+            inner_clean = inner.strip()
+
+            # Skip SQL keywords
+            if inner_clean.upper() in {
+                "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "TOP",
+                "SUM", "COUNT", "AVG", "MIN", "MAX", "CAST", "INT", "AS",
+                "AND", "OR", "IN", "LIKE", "IS", "NULL", "NOT", "UNION",
+                "CASE", "WHEN", "THEN", "ELSE", "END", "OVER", "PARTITION",
+                "JOIN", "ON", "USING", "WITH", "INTO", "WHEN", "THEN", "OVER"
+            }:
+                continue
+
+            # Skip table/schema
+            if inner_clean.lower() in {"dbo", "salesplantable"}:
+                continue
+
+            # Skip if after AS (alias)
+            if re.search(rf"\bAS\s+{re.escape(inner_clean)}\b", sql, re.I):
+                continue
+
+            # Validate column
+            if (inner_clean not in self.valid_columns and 
+                f"[{inner_clean}]" not in self.valid_columns and
+                inner_clean != "*"):
+                logger.warning(f"Invalid column detected: {inner_clean} in SQL: {sql}")
+                return False
 
         return True
