@@ -1,47 +1,113 @@
 {
   "columns": {
-    "Amount": ["Sales", "Value", "amount"],
+    "Amount": ["Sales", "Value", "amount","value", "sales amount", "sales value",
+               "sales is", "value is", "amount is", "sales value is"],
     "OrderFY": [
       "Fiscal Year", "FY", "fiscal", "fiscal year",
-      "in FY", "for FY", "fy", "year"
+      "in FY", "for FY", "fy", "year", "fiscal year is", "fiscal year for", "fiscal year in", "year",
+      "current fy", "previous fy", "that is current", "is current", "current fiscal", "previous fiscal",
+      "f.y."
     ],
     "Customer_Name": [
-      "Customer", "Customer Name", "Party", "Client",
-      "customer is", "customer name is"
+      "Customer", "Customer Name", "Party", "Client","clients",
+      "customer is", "customer name is", "for customer", "party is"
     ],
     "BacklogAmount": [
-      "Balance Amount", "Outstanding Amount",
-      "Balance", "Outstanding", "backlog"
+      "Balance Amount", "Outstanding Amount", "Outstanding Value",
+      "Balance Value", "Outstanding", "backlog amount",
+      "Balance", "backlog"
     ],
-    "Grade": ["grade"],
+    "Grade": ["grade", "Product Grade", "product grade", "grade is", "item grade"],
     "MFGMode": [
       "MFG", "Mode", "Manufacturing Mode",
-      "mfg is", "mode is", "production"
+      "mfg is", "mode is", "production", "manufacturing mode",
+      "manufacturing", "mfg mode"
     ],
-    "InvoicedQuantity": ["Invoiced", "invoiced qty", "qty invoiced"],
+    "InvoicedQuantity": ["Invoiced", "invoiced qty", "qty invoiced", "invoiced qty is",
+                         "invoiced quantity", "qty invoiced is", "invoiced quantity is"],
+
     "Quantity": ["Order Quantity", "Order Qty", "quantity", "qty"],
     "OutstandingQuantity": [
       "Balance Quantity", "Balance Qty",
-      "outstanding qty", "balance"
+      "outstanding qty", "balance", "outstanding quantity"
     ],
     "DocumentNo": ["No", "Document", "document no", "doc no"],
-    "MonthName": ["Order Month", "month", "order month"],
-    "monthyear": ["MY", "month year", "my"],
-    "MPCODE": ["Item", "Product", "MP", "mp code"],
-    "PlannedQuarter": ["Quarter", "Order Quarter", "Qtr", "quarter"],
+
+    "MonthName": ["Order Month", "month", "order month","by month",
+      "April", "May", "June", "July", "August", "September",
+      "October", "November", "December", "January", "February", "March"],
+
+    "monthyear": ["MY", "month year", "my","apr-25", "apr-24",
+      "august 2024", "july 2025", "apr 25", "april 2025"],
+
+    "MPCODE": ["Item", "Product", "MP", "mp code","material code",
+      "material", "item code", "product code", "mp code is", "item is", "product is"],
+
+    "PlannedQuarter": ["Quarter", "Order Quarter", "Qtr", "quarter","Q1", "Q2", "Q3", "Q4",
+      "in Q1", "in quarter 1", "in Q2", "in quarter 2",
+      "in Q3", "in quarter 3", "in Q4", "in quarter 4",
+      "quarter is", "qtr is", "quarter1", "quarter2", "quarter3", "quarter4"],
+
     "SalespersonCode": ["Salesperson", "sales", "sales person"],
-    "Type": ["Document Type", "type", "doc type"]
+    "Type": ["Document Type", "type", "doc type","order type", "LOI", "Order"]
   },
   "intent": {
-    "current_fy": ["current fy", "is current", "this fy", "current fiscal"],
-    "previous_fy": ["previous fy", "last fy", "prior fy", "previous fiscal"],
-    "current_month": ["current month", "this month"],
-    "previous_month": ["previous month", "last month"]
+    "compare": [
+      "compare", "vs", "versus", "comparison", "side by side"
+    ],
+    "growth": [
+      "growth", "increase", "delta", "change", "diff", "difference"
+    ],
+    "growth_month": [
+      "growth month", "growth by month", "gm", "monthly growth"
+    ],
+    "growth_month_pct": [
+      "growth month %", "growth by month %", "gm%", "monthly growth %"
+    ],
+    "growth_year": [
+      "growth year", "growth by year", "gy", "annual growth"
+    ],
+    "growth_year_pct": [
+      "growth year %", "growth by year %", "gy%", "annual growth %"
+    ],
+    "current_fy": [
+      "current fy", "is current", "this fy", "current fiscal", "that is current",
+      "current year", "this year"
+    ],
+    "previous_fy": [
+      "previous fy", "last fy", "prior fy", "previous fiscal", "last year"
+    ],
+    "current_month": [
+      "current month", "this month"
+    ],
+    "previous_month": [
+      "previous month", "last month"
+    ],
+    "top_n": [
+      "top", "best", "largest", "highest", "most", "leading"
+    ],
+    "list_rows": [
+      "list of", "show me", "show", "give me", "fetch", "retrieve"
+    ],
+    "matrix": [
+      "as matrix", "as chart", "as table", "stacked", "bar chart", "visualize"
+    ],
+    "aggregate": [
+      "total", "sum", "amount", "count", "number of"
+    ]
   },
   "metrics": {
-    "growth_year": ["growth year", "growth by year", "gy", "growth yr"],
-    "growth_year_pct": ["growth year %", "growth yr %", "gy%", "growth by year %"],
-    "growth_month": ["growth month", "growth by month", "gm"],
-    "growth_month_pct": ["growth month %", "growth by month %", "gm%"]
+    "Amount": ["Amount", "Sales", "Value"],
+    "InvoicedQuantity": ["Invoiced Quantity", "Invoiced Qty"],
+    "Count": ["Count of", "Number of", "How many"]
+  },
+  "values": {
+    "MFGMode": {
+      "Production": ["production", "mfg=prod", "mfg: production"]
+    },
+    "Type": {
+      "Order": ["order", "orders"],
+      "LOI": ["loi", "letter of intent"]
+    }
   }
 }

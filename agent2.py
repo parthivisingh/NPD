@@ -1,3 +1,5 @@
+# agent2.py
+
 import os
 import re
 import pyodbc
@@ -7,6 +9,7 @@ import traceback
 import json
 
 from intent_router import generate_sql as generate_sql_template
+from intent_router import detect_intent  # ← Added
 from sql_guard import SQLGuard
 
 load_dotenv()
@@ -24,10 +27,8 @@ LLM_URL      = os.getenv("LLM_URL", "https://api.fireworks.ai/inference/v1")
 LLM_MODEL    = os.getenv("LLM_MODEL", "accounts/fireworks/models/llama-v3p1-8b-instruct")
 LLM_API_KEY  = os.getenv("LLM_API_KEY", "")
 
-
 # ---------------- DB CONNECTION ----------------
 def build_conn_str() -> str:
-    """Build a DSN-less ODBC connection string."""
     parts = [
         f"DRIVER={{{SQL_DRIVER}}}",
         f"SERVER={SQL_SERVER}",
@@ -50,7 +51,6 @@ def get_connection():
 
 # ---------------- SCHEMA INTROSPECTION ----------------
 def fetch_schema_text(conn, include_schemas=("dbo",), limit_tables=50) -> str:
-    """Fetch concise schema: table -> columns (name type)."""
     cur = conn.cursor()
     placeholders = ",".join("?" for _ in include_schemas)
     cur.execute(f"""
@@ -78,151 +78,101 @@ def fetch_schema_text(conn, include_schemas=("dbo",), limit_tables=50) -> str:
     lines.append("-- Note: [MMMMYY] = 'APR25', 'JUL25' — use for month-year filtering")
     return "\n".join(lines)
 
-def get_column_mapping(conn):
+# ---------------- LLM SQL GENERATION ----------------
+def generate_sql_with_context(question: str, schema_text: str, intent: str, synonym_map: dict) -> str:
     """
-    Build a fuzzy map from common misspellings to real column names.
-    Example: ord_fy -> OrderFY
+    Generate SQL using LLM with rich context.
     """
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME
-        FROM INFORMATION_SCHEMA.COLUMNS
-    """)
-    rows = cur.fetchall()
-    fuzzy_map = {}
+    # Build context
+    available_columns = list(synonym_map["columns"].keys())
+    column_synonyms = synonym_map["columns"]
 
-    for sch, tbl, col in rows:
-        key = col.lower().replace("_", "").replace(" ", "")
-        fuzzy_map[key] = col
+    prompt = f"""
+You are a precise SQL assistant for Microsoft SQL Server. Generate ONLY a SELECT query.
 
-        # Also map common abbreviations
-        if "fy" in key:
-            fuzzy_map[key.replace("fy", "")] = col
-        if "year" in key:
-            fuzzy_map[key.replace("year", "")] = col
-
-    return fuzzy_map
-
-# ---------------- OLLAMA (NL -> SQL) ----------------
-SYSTEM_PROMPT = """You are a helpful assistant that translates natural language into T-SQL SELECT queries for Microsoft SQL Server.
-
-Guidelines:
-- Return ONLY the SQL query, no explanations.
+## Rules
+- Return ONLY the SQL query. No explanations.
 - Use SELECT to answer the question.
-- Use only column names from the schema. Do not invent new column names or modify existing column names.
-- Wrap column names in [ ] only if they have spaces or are reserved keywords.
-- Do not use INSERT, UPDATE, DELETE, or DDL commands.
-- Do not output markdown or code fences.
-"""
-# -------------- LOAD SYNONYMNS ----------------
+- Use ONLY column names from the schema. Do NOT invent or modify column names.
+- Wrap column names in [ ] if they have spaces or are keywords.
+- Do NOT use INSERT, UPDATE, DELETE, or DDL.
+- Do NOT output markdown or code fences.
 
-def load_synonym_map(path="synonym_map.json"):
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    
-    # Flatten for fast lookup: "sales" → "Amount"
-    word_to_col = {}
-    for col, synonyms in data["columns"].items():
-        for syn in synonyms:
-            word_to_col[syn.lower().strip()] = col
+## Context
+Intent: {intent}
+Available Columns: {available_columns}
+Column Synonyms: {column_synonyms}
+Schema:
+{schema_text}
 
-    intent_map = {}
-    for intent, phrases in data["intent"].items():
-        for phrase in phrases:
-            intent_map[phrase.lower().strip()] = intent
+## Question
+{question}
 
-    metric_map = {}
-    for metric, phrases in data["metrics"].items():
-        for phrase in phrases:
-            metric_map[phrase.lower().strip()] = metric
+SQL:
+""".strip()
 
-    return {
-        "word_to_col": word_to_col,
-        "intent_map": intent_map,
-        "metric_map": metric_map,
-        "raw": data
-    }
+    headers = {"Content-Type": "application/json"}
+    if LLM_API_KEY:
+        headers["Authorization"] = f"Bearer {LLM_API_KEY}"
 
-# Load once
-SYNONYM_MAP = load_synonym_map()
-
-
-# -------------- GENERATE SQL  ----------------
-
-def generate_sql(question: str, schema_text: str) -> str:
-    """Call Fireworks (or other OpenAI-compatible LLM) to generate SQL from natural language."""
     try:
-        headers = {"Content-Type": "application/json"}
-        if LLM_API_KEY:
-            headers["Authorization"] = f"Bearer {LLM_API_KEY}"
-
         r = requests.post(
             f"{LLM_URL}/chat/completions",
             json={
                 "model": LLM_MODEL,
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": f"SCHEMA:\n{schema_text}\n\nQUESTION:\n{question}\n\nSQL:"}
+                    {"role": "system", "content": "You are a helpful SQL assistant."},
+                    {"role": "user", "content": prompt}
                 ],
+                "temperature": 0.0,
+                "max_tokens": 500,
                 "stream": False
             },
             headers=headers,
-            timeout=500
+            timeout=30
         )
         r.raise_for_status()
-
-        data = r.json()
-        # Fireworks is OpenAI-compatible: result is in choices[0].message.content
-        #raw = data["choices"][0]["message"]["content"].strip()
-        raw = (
-            data["choices"][0].get("message", {}).get("content") 
-            or data["choices"][0].get("text", "")
-        ).strip()
-
-        # Extract SQL from code blocks
-        if "```sql" in raw:
-            match = re.search(r"```sql\s*(.*?)\s*```", raw, re.DOTALL | re.IGNORECASE)
-            return match.group(1).strip() if match else raw
-        elif "```" in raw:
-            match = re.search(r"```\s*(.*?)\s*```", raw, re.DOTALL)
-            return match.group(1).strip() if match else raw
-        return raw.replace("`", "").strip()
-
+        raw = r.json()["choices"][0]["message"]["content"].strip()
+        return extract_sql_from_response(raw)
     except Exception as e:
-        raise RuntimeError(f"Failed to generate SQL: {e}")
+        raise RuntimeError(f"LLM call failed: {e}")
 
+def extract_sql_from_response(text: str) -> str:
+    """
+    Extract SQL from LLM response (with or without markdown).
+    """
+    if "```sql" in text:
+        match = re.search(r"```sql\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
+        return match.group(1).strip() if match else text
+    elif "```" in text:
+        match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
+        return match.group(1).strip() if match else text
+    return text.strip().replace("`", "")
 
 # ---------------- SAFETY CHECK ----------------
-WRITE_KEYWORDS = ("insert", "update", "delete", "alter", "drop", "truncate", "create", "merge", "exec")
-
 def is_safe_sql(sql: str) -> bool:
     """Check if SQL is safe (read-only SELECT)."""
     if not sql:
         return False
-    # Remove comments
     cleaned = re.sub(r"--.*?$|/\*.*?\*/", "", sql, flags=re.MULTILINE | re.DOTALL)
-    # Normalize whitespace
     cleaned = re.sub(r"\s+", " ", cleaned).strip().lower()
 
-    # Handle WITH CTE
     if cleaned.startswith("with "):
         cleaned = cleaned[5:].strip()
 
-    # Must start with SELECT
-    #if not cleaned.startswith("select"):
     if not cleaned.lstrip(" (").startswith("select"):
         return False
 
-    # Block write operations
+    WRITE_KEYWORDS = ("insert", "update", "delete", "alter", "drop", "truncate", "create", "merge", "exec")
     return not any(kw in cleaned for kw in WRITE_KEYWORDS)
 
 # ---------------- EXECUTION ----------------
 def execute_sql(conn, sql: str):
     cur = conn.cursor()
     cur.execute(sql)
-    columns = [desc[0] for desc in cur.description]
     if cur.description is None:
         return [], []
+    columns = [desc[0] for desc in cur.description]
     rows = cur.fetchall()
     return columns, rows
 
@@ -236,7 +186,6 @@ def main():
         return
     print("[*] Connected.")
 
-    # Initialize SQLGuard
     try:
         guard = SQLGuard(conn)
         print("[*] SQLGuard initialized. Column resolver ready.")
@@ -251,7 +200,7 @@ def main():
         print(f"[ERROR] Schema fetch failed: {e}")
         return
     print("[*] Schema ready.")
-    #
+
     while True:
         try:
             q = input("\nAsk about your data (or 'exit'): ").strip()
@@ -264,16 +213,23 @@ def main():
             sql = generate_sql_template(q, schema_text)
 
             if sql is None:
-                print("No template matched. Using LLM...")
-                raw_sql = generate_sql(q, schema_text)
-                sql = guard.repair_sql(raw_sql)
-                print("\n--- Raw Generated SQL ---")
+                print("No template matched. Using LLM with context...")
+
+                # Get intent and synonym map
+                intent = detect_intent(q)
+
+                # Call LLM with context
+                raw_sql = generate_sql_with_context(q, schema_text, intent, SYNONYM_MAP["raw"])
+                print("\n--- Raw LLM Output ---")
                 print(raw_sql)
+
+                # Repair SQL (fix [MMMYY] → [MMMMYY], etc.)
+                sql = guard.repair_sql(raw_sql)
             else:
                 print("\n--- Using Template-Based SQL ---")
                 print(sql)
 
-            print("\n--- Repaired SQL ---")
+            print("\n--- Final SQL ---")
             print(sql)
 
             # Step 2: Validate
@@ -288,9 +244,12 @@ def main():
             # Step 3: Execute
             cols, rows = execute_sql(conn, sql)
             print("\n--- Results ---")
-            print("\t".join(cols))
-            for row in rows:
-                print("\t".join("" if v is None else str(v) for v in row))
+            if cols and rows:
+                print("\t".join(cols))
+                for row in rows:
+                    print("\t".join("" if v is None else str(v) for v in row))
+            else:
+                print("(No rows returned)")
             print("---------------")
 
         except requests.exceptions.RequestException as e:
