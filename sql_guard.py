@@ -105,37 +105,18 @@ class SQLGuard:
         sql_clean = re.sub(r"\b\d{2,}\b", "", sql_clean) # Remove numbers
         # Common SQL keywords
         SQL_KEYWORDS = {
-            # --- Core ---
             "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "HAVING", "AS",
-            "DISTINCT", "ALL", "TOP", "OFFSET", "FETCH", "LIMIT",  # LIMIT for safety
-
-            # --- Logic ---
+            "DISTINCT", "ALL", "TOP", "OFFSET", "FETCH", "LIMIT", 
             "AND", "OR", "NOT", "IN", "LIKE", "BETWEEN", "IS", "NULL", "ISNULL", "COALESCE", "CASE", "WHEN", "THEN", "ELSE", "END",
-
-            # --- Aggregation ---
             "SUM", "COUNT", "AVG", "MIN", "MAX", "STDEV", "VAR", "GROUPING",
-
-            # --- Window Functions ---
             "OVER", "PARTITION", "ORDER", "ROWS", "RANGE", "CURRENT ROW", "PRECEDING", "FOLLOWING",
             "ROW_NUMBER", "RANK", "DENSE_RANK", "NTILE", "LAG", "LEAD", "FIRST_VALUE", "LAST_VALUE", "NTH_VALUE",
-
-            # --- Type & Conversion ---
             "CAST", "CONVERT", "TRY_CAST", "TRY_CONVERT", "DATEPART", "YEAR", "MONTH", "DAY", "DATENAME",
             "INT", "BIGINT", "DECIMAL", "NUMERIC", "FLOAT", "REAL", "VARCHAR", "NVARCHAR", "CHAR", "NCHAR", "DATE", "DATETIME", "BIT",
-
-            # --- Joins & Sets ---
             "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "OUTER", "CROSS", "APPLY",
             "ON", "USING", "UNION", "UNION ALL", "EXCEPT", "INTERSECT",
-
-            # --- CTE & Subqueries ---
             "WITH", "RECURSIVE", "EXISTS", "NOT EXISTS", "ANY", "SOME", "ALL",
-
-            # --- DDL & Security (for blocking) ---
-            "INSERT", "UPDATE", "DELETE", "MERGE", "CREATE", "ALTER", "DROP", "TRUNCATE", "EXEC", "EXECUTE", 
-            "GRANT", "REVOKE", "DENY", "OPENROWSET", "BULK", "XP_CMDSHELL", "SP_OA", "INSERT INTO", "SELECT INTO",
-
-            # --- PIVOT (rare) ---
-            "PIVOT", "UNPIVOT", "FOR", "IN"
+            "PIVOT", "UNPIVOT", "FOR", "IN","DESC"
         }
         
         # Find all [col] or bare col
@@ -190,3 +171,50 @@ class SQLGuard:
             return False
 
         return True
+    
+    def _fix_missing_group_by(self, sql: str) -> str:
+        """
+        Auto-add GROUP BY for non-aggregated columns when SELECT contains SUM, COUNT, etc.
+        Only works for simple cases.
+        """
+        if not re.search(r"\b(SUM|COUNT|AVG|MIN|MAX)\s*\(", sql, re.I):
+            return sql
+
+        # Extract SELECT columns
+        select_match = re.search(r"SELECT\s+(.*?)\s+FROM", sql, re.I | re.DOTALL)
+        if not select_match:
+            return sql
+
+        select_part = select_match.group(1).strip()
+        # Remove aliases
+        select_clean = re.sub(r"\s+AS\s+\w+", "", select_part, flags=re.I)
+
+        # Extract column names: [col] or bare words
+        col_matches = re.findall(r"\[\s*([^\]]+)\s*\]|\b([a-zA-Z_][\w]*)\b", select_clean)
+        columns = [g1 or g2 for g1, g2 in col_matches if g1 or g2]
+
+        # Find aggregated columns
+        aggregated = []
+        for col in columns:
+            if re.search(rf"\b(SUM|COUNT|AVG|MIN|MAX)\s*\([^)]*{re.escape(col)}", sql, re.I):
+                aggregated.append(col.lower())
+
+        # Non-aggregated columns → need GROUP BY
+        group_cols = [col for col in columns if col.lower() not in aggregated and col.upper() not in {
+            "SUM", "COUNT", "AVG", "MIN", "MAX", "CASE", "WHEN", "THEN", "ELSE", "END"
+        }]
+
+        if not group_cols:
+            return sql
+
+        # Remove existing GROUP BY
+        sql_no_group = re.sub(r"\s+GROUP BY.*?(?:ORDER BY|HAVING|$)", " ", sql, flags=re.I | re.DOTALL)
+
+        # Add GROUP BY
+        group_by_clause = " GROUP BY " + ", ".join(f"[{col}]" if "[" in col or " " in col else col for col in group_cols)
+        if "ORDER BY" in sql.upper():
+            sql_no_group = re.sub(r"\s+(ORDER BY.*)", r" " + group_by_clause + r" \1", sql_no_group, flags=re.I)
+        else:
+            sql_no_group = sql_no_group.strip().rstrip(";") + group_by_clause
+
+        return sql_no_group

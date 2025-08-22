@@ -167,3 +167,26 @@ WHERE
     [OrderFY] = '2024-25' OR [OrderFY] = '2023-24'
     AND [MFGMode] = 'PRODUCTION'
 2025-08-21 21:03:27,212 | WARNING | Invalid columns blocked: ['BETWEEN'] | SQL: SELECT [Amount], [MonthName], [Type] FROM dbo.SalesPlanTable WHERE [monthyear] = 'Jul-25' AND [Type] IN ('LOI', 'Order') AND [Customer_Name] = 'APOLLO MICRO SYSTEMS LIMITED' AND CAST(LEFT(OrderFY, 4) AS INT) BETWEEN 2025 AND 2026
+2025-08-21 21:36:35,512 | WARNING | Invalid columns blocked: ['DESC'] | SQL: 
+        SELECT
+            [DocumentNo], [OrderDate], [Amount], [Customer_Name]
+        FROM dbo.SalesPlanTable
+         WHERE [monthyear] = 'Jul-25'
+        ORDER BY OrderDate DESC
+        
+2025-08-21 21:38:38,535 | WARNING | Invalid columns blocked: ['DESC'] | SQL: 
+        SELECT
+            [OrderDate], [Customer_Name], SUM(Amount) AS TotalAmount
+        FROM dbo.SalesPlanTable
+         WHERE [monthyear] = 'Jul-25'
+        GROUP BY [OrderDate], [Customer_Name]
+        ORDER BY TotalAmount DESC
+        
+2025-08-21 21:41:00,388 | WARNING | Invalid columns blocked: ['DESC'] | SQL: 
+        SELECT
+            [DocumentNo], [OrderDate], [Customer_Name], SUM(Amount) AS TotalAmount
+        FROM dbo.SalesPlanTable
+         WHERE [monthyear] = 'Jul-25'
+        GROUP BY [DocumentNo], [OrderDate], [Customer_Name]
+        ORDER BY TotalAmount DESC
+        
