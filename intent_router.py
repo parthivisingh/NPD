@@ -110,6 +110,7 @@ def extract_filters(q: str) -> List[str]:
     - Customer_Name
     - Previous Month
     - Quarter
+    - Month Range: "April to June"
     """
     filters = []
     q_lower = q.lower().strip()
@@ -118,25 +119,20 @@ def extract_filters(q: str) -> List[str]:
     # 1. OrderFY: current, previous, or explicit
     # ----------------------------------------
     fy_hint = None
-
-    # Direct phrases
     if any(phrase in q_lower for phrase in ["current fy", "is current", "current fiscal", "this fy"]):
         fy_hint = "current"
     elif any(phrase in q_lower for phrase in ["previous fy", "last fy", "prior fy", "previous fiscal", "last fiscal"]):
         fy_hint = "previous"
-    # Handle "FY previous", "FY current", "in FY 2024-25"
     elif "fy" in q_lower:
         if "previous" in q_lower:
             fy_hint = "previous"
         elif "current" in q_lower:
             fy_hint = "current"
         else:
-            # Match "fy 2024-25", "fy:2024-25", "fy=2024-25"
             fy_match = re.search(r"fy\s*[=:\s]?\s*(20\d{2}-\d{2})", q, re.I)
             if fy_match:
                 fy_hint = fy_match.group(1)
 
-    # Apply FY filter if resolved
     if fy_hint:
         fy = resolve_fy_hint(fy_hint)
         if fy:
@@ -166,15 +162,52 @@ def extract_filters(q: str) -> List[str]:
 
     # ----------------------------------------
     # 5. Quarter
-    # VER3.3 QUARTER LOGIC PERFECTED
     # ----------------------------------------
     q_match = re.search(r"quarter\s+is\s+(Q[1-4])", q, re.I)
     if q_match:
         q_val = q_match.group(1).upper()
         filters.append(f"[OrderQuarter] LIKE '{q_val}%'")
 
-    return filters
+    # ----------------------------------------
+    # 6. Month Range: "April to June", "Jan - Mar"
+    # ----------------------------------------
+    month_range_match = re.search(
+        r"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*(?:to|-|–)\s*(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b",
+        q, re.I
+    )
+    if month_range_match:
+        start_raw, end_raw = month_range_match.groups()
+        month_map = {
+            'jan': 'Jan', 'january': 'Jan',
+            'feb': 'Feb', 'february': 'Feb',
+            'mar': 'Mar', 'march': 'Mar',
+            'apr': 'Apr', 'april': 'Apr',
+            'may': 'May',
+            'jun': 'Jun', 'june': 'Jun',
+            'jul': 'Jul', 'july': 'Jul',
+            'aug': 'Aug', 'august': 'Aug',
+            'sep': 'Sep', 'september': 'Sep',
+            'oct': 'Oct', 'october': 'Oct',
+            'nov': 'Nov', 'november': 'Nov',
+            'dec': 'Dec', 'december': 'Dec'
+        }
+        start_short = month_map.get(start_raw.lower())
+        end_short = month_map.get(end_raw.lower())
+        if start_short and end_short:
+            # Get all months in range
+            month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+            try:
+                start_idx = month_order.index(start_short)
+                end_idx = month_order.index(end_short)
+                if start_idx <= end_idx:
+                    months_in_range = month_order[start_idx:end_idx+1]
+                    month_conditions = " OR ".join(f"LEFT([monthyear], 3) = '{m}'" for m in months_in_range)
+                    filters.append(f"({month_conditions})")
+            except ValueError:
+                pass  # Invalid month
 
+    # ✅ Return at the very end
+    return filters
 # -------------------------------
 # Intent Detection
 # -------------------------------
@@ -260,8 +293,10 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
         match = re.search(r"compare\s+amount\s+in\s+(?:fy\s+)?(.+?)\s+(?:and|vs)\s+(.+)", q_clean, re.I)
         if match:
             val1_raw, val2_raw = match.groups()
-            val1 = val1_raw.strip().strip("'\"")
-            val2 = val2_raw.strip().strip("'\"")
+            val1 = val1_raw.strip().strip("'\"").replace("FY", "").strip()
+            val2 = val2_raw.strip().strip("'\"").replace("FY", "").strip()
+            # val1 = val1_raw.strip().strip("'\"")
+            # val2 = val2_raw.strip().strip("'\"")
 
             # Case 1: FY
             if re.match(r"20\d{2}-\d{2}", val1) and re.match(r"20\d{2}-\d{2}", val2):

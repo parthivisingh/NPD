@@ -208,3 +208,17 @@ WHERE
     GROUP BY [Customer_Name]
     ORDER BY TotalAmount DESC
     
+2025-08-22 12:00:29,170 | WARNING | Invalid columns blocked: ['Apr-', 'Apr-'] | SQL: 
+SELECT
+    SUM(CASE WHEN [monthyear] = 'Apr-25' THEN Amount ELSE 0 END) AS [Apr-25],
+    SUM(CASE WHEN [monthyear] = 'Apr-24' THEN Amount ELSE 0 END) AS [Apr-24]
+FROM dbo.SalesPlanTable
+WHERE [monthyear] IN ('Apr-25', 'Apr-24')
+
+2025-08-22 12:02:16,162 | WARNING | Invalid columns blocked: ['Apr-', 'Apr-'] | SQL: 
+SELECT
+    SUM(CASE WHEN [monthyear] = 'Apr-25' THEN Amount ELSE 0 END) AS [Apr-25],
+    SUM(CASE WHEN [monthyear] = 'Apr-24' THEN Amount ELSE 0 END) AS [Apr-24]
+FROM dbo.SalesPlanTable
+WHERE [monthyear] IN ('Apr-25', 'Apr-24')
+
