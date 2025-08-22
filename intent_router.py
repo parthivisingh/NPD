@@ -104,46 +104,74 @@ def extract_filters(q: str) -> List[str]:
     """
     Extract all filters from the query.
     Returns list of WHERE conditions.
+    Handles:
+    - FY: 'current', 'previous', '2024-25', 'FY 2024-25', 'in FY previous'
+    - MFGMode
+    - Customer_Name
+    - Previous Month
+    - Quarter
     """
     filters = []
-    q_lower = q.lower()
+    q_lower = q.lower().strip()
 
-    # OrderFY: current, previous, or explicit
+    # ----------------------------------------
+    # 1. OrderFY: current, previous, or explicit
+    # ----------------------------------------
     fy_hint = None
-    if "current fy" in q_lower or "is current" in q_lower:
-        fy_hint = "current"
-    elif "previous fy" in q_lower:
-        fy_hint = "previous"
-    else:
-        fy_match = re.search(r"fy\s+(20\d{2}-\d{2})", q, re.I)
-        if fy_match:
-            fy_hint = fy_match.group(1)
 
+    # Direct phrases
+    if any(phrase in q_lower for phrase in ["current fy", "is current", "current fiscal", "this fy"]):
+        fy_hint = "current"
+    elif any(phrase in q_lower for phrase in ["previous fy", "last fy", "prior fy", "previous fiscal", "last fiscal"]):
+        fy_hint = "previous"
+    # Handle "FY previous", "FY current", "in FY 2024-25"
+    elif "fy" in q_lower:
+        if "previous" in q_lower:
+            fy_hint = "previous"
+        elif "current" in q_lower:
+            fy_hint = "current"
+        else:
+            # Match "fy 2024-25", "fy:2024-25", "fy=2024-25"
+            fy_match = re.search(r"fy\s*[=:\s]?\s*(20\d{2}-\d{2})", q, re.I)
+            if fy_match:
+                fy_hint = fy_match.group(1)
+
+    # Apply FY filter if resolved
     if fy_hint:
         fy = resolve_fy_hint(fy_hint)
         if fy:
             filters.append(f"OrderFY = '{fy}'")
 
-    # MFGMode
+    # ----------------------------------------
+    # 2. MFGMode
+    # ----------------------------------------
     mfg_match = re.search(r"mfg\s+is\s+([\w-]+)", q, re.I)
     if mfg_match:
         filters.append(f"[MFGMode] = '{mfg_match.group(1).title()}'")
 
-    # Customer_Name
-    #cust_match = re.search(r"customer\s+is\s+([A-Z][\w\s.&-]+?)(?:\s+|$)", q, re.I)
+    # ----------------------------------------
+    # 3. Customer_Name
+    # ----------------------------------------
     cust_match = re.search(r"customer\s+is\s+(.+?)(?:\s+(?:and|where|$)|$)", q, re.I)
     if cust_match:
-        filters.append(f"[Customer_Name] = '{cust_match.group(1).strip()}'")
+        customer_value = cust_match.group(1).strip()
+        filters.append(f"[Customer_Name] = '{customer_value}'")
 
-    # Previous Month
+    # ----------------------------------------
+    # 4. Previous Month
+    # ----------------------------------------
     if "previous month" in q_lower:
         prev_month = (date.today().replace(day=1) - timedelta(days=1)).strftime("%b-%y")
         filters.append(f"[monthyear] = '{prev_month}'")
 
-    # Quarter
+    # ----------------------------------------
+    # 5. Quarter
+    # VER3.3 QUARTER LOGIC PERFECTED
+    # ----------------------------------------
     q_match = re.search(r"quarter\s+is\s+(Q[1-4])", q, re.I)
     if q_match:
-        filters.append(f"[PlannedQuarter] = '{q_match.group(1)}'")
+        q_val = q_match.group(1).upper()
+        filters.append(f"[OrderQuarter] LIKE '{q_val}%'")
 
     return filters
 
@@ -312,18 +340,27 @@ WHERE [monthyear] IN ('{my1}', '{my2}')
             entity = resolve_column(entity_hint.strip()) or "Customer_Name"
             metric = resolve_column(metric_hint.strip()) or "Amount"
 
-            fy = resolve_fy_hint(fy_hint) if fy_hint else None
-            where_sql = f" WHERE OrderFY = '{fy}'" if fy else ""
+            # ✅ Start with all filters (Q1, mfg, customer, previous month)
+            filters = extract_filters(q_clean)
+
+            # ✅ Add FY filter if present in regex
+            if fy_hint:
+                fy = resolve_fy_hint(fy_hint)
+                if fy:
+                    filters.append(f"OrderFY = '{fy}'")
+
+            # ✅ Build WHERE clause
+            where_sql = " WHERE " + " AND ".join(filters) if filters else ""
 
             return f"""
-SELECT TOP {n}
-    [{entity}],
-    SUM([{metric}]) AS Total{metric}
-FROM dbo.SalesPlanTable
-{where_sql}
-GROUP BY [{entity}]
-ORDER BY Total{metric} DESC
-"""
+    SELECT TOP {n}
+        [{entity}],
+        SUM([{metric}]) AS Total{metric}
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    GROUP BY [{entity}]
+    ORDER BY Total{metric} DESC
+    """
     # -------------------------------
     # 4. List Rows: "list of no, date, customer..."
     # -------------------------------

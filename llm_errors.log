@@ -190,3 +190,21 @@ WHERE
         GROUP BY [DocumentNo], [OrderDate], [Customer_Name]
         ORDER BY TotalAmount DESC
         
+2025-08-22 11:47:26,649 | WARNING | Invalid columns blocked: ['Order Quarter'] | SQL: 
+    SELECT TOP 10
+        [Customer_Name],
+        SUM([Amount]) AS TotalAmount
+    FROM dbo.SalesPlanTable
+     WHERE OrderFY = '2024-25' AND [Order Quarter] LIKE 'Q2%'
+    GROUP BY [Customer_Name]
+    ORDER BY TotalAmount DESC
+    
+2025-08-22 11:48:34,805 | WARNING | Invalid columns blocked: ['Order Quarter'] | SQL: 
+    SELECT TOP 10
+        [Customer_Name],
+        SUM([Amount]) AS TotalAmount
+    FROM dbo.SalesPlanTable
+     WHERE OrderFY = '2024-25' AND [Order Quarter] LIKE 'Q1%'
+    GROUP BY [Customer_Name]
+    ORDER BY TotalAmount DESC
+    
