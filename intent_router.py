@@ -177,24 +177,26 @@ def detect_intent(q: str) -> str:
     return "unknown"
 
 # -------------------------------
-# Entity Extraction
+# Entity Extraction 
+# VER MOD 3.2 PERFECTED "by month and type", "by month, type", "by month by type", "by FY for previous"
+# DO NOT CHANGE
 # -------------------------------
 
 def extract_entities(q: str) -> List[str]:
     """
     Extract all entities after 'by', handling:
     - 'by X and Y'
-    - 'by X by Y'
     - 'by X, Y'
+    - 'by X by Y'
+    Only stop at clause boundaries: 'for', 'in', 'where', or end.
     """
-    # Match all text after any 'by' until clause break
-    # Supports: "by X and Y", "by X by Y", "by X, Y"
-    by_match = re.search(r"by\s+(.+?)(?:\s*(?:,|and|for|in|where|$))", q, re.I)
+    # Match everything after the first 'by' until clause break (not 'and' or ',')
+    by_match = re.search(r"by\s+(.+?)(?:\s*(?:for|in|where|$))", q, re.I)
     if not by_match:
         return []
     text = by_match.group(1).strip()
 
-    # Split by 'and', comma, or additional 'by'
+    # Split by 'and', comma, or 'by'
     parts = re.split(r"\s+and\s+|\s*,\s+|\s+by\s+", text, flags=re.I)
     entities = []
     for part in parts:
