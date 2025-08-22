@@ -79,7 +79,8 @@ class SQLGuard:
         """
         fixes = [
             self._fix_column_names,
-            self._fix_cast_fy
+            self._fix_cast_fy,
+            self._fix_missing_group_by
         ]
         for fix in fixes:
             try:
