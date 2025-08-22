@@ -36,7 +36,7 @@
 
     "MonthName": ["Order Month", "month", "order month","by month",
       "April", "May", "June", "July", "August", "September",
-      "October", "November", "December", "January", "February", "March"],
+      "October", "November", "December", "January", "February", "March", "Month"],
 
     "monthyear": ["MY", "month year", "my","apr-25", "apr-24",
       "august 2024", "july 2025", "apr 25", "april 2025"],

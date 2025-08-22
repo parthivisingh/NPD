@@ -181,15 +181,27 @@ def detect_intent(q: str) -> str:
 # -------------------------------
 
 def extract_entities(q: str) -> List[str]:
-    # Match "by X" up to comma, "and", or end
-    by_match = re.search(r"by\s+([^,;]+?)(?:\s*(?:,|and|$))", q, re.I)
+    """
+    Extract all entities after 'by', handling:
+    - 'by X and Y'
+    - 'by X by Y'
+    - 'by X, Y'
+    """
+    # Match all text after any 'by' until clause break
+    # Supports: "by X and Y", "by X by Y", "by X, Y"
+    by_match = re.search(r"by\s+(.+?)(?:\s*(?:,|and|for|in|where|$))", q, re.I)
     if not by_match:
         return []
     text = by_match.group(1).strip()
-    parts = re.split(r"\s+and\s+|\s*,\s+", text)
+
+    # Split by 'and', comma, or additional 'by'
+    parts = re.split(r"\s+and\s+|\s*,\s+|\s+by\s+", text, flags=re.I)
     entities = []
     for part in parts:
-        col = resolve_column(part.strip())
+        part = part.strip()
+        if not part:
+            continue
+        col = resolve_column(part)
         if col:
             entities.append(col)
     return entities
