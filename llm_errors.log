@@ -271,3 +271,12 @@ WHERE [monthyear] IN ('Apr-25', 'Apr-24')
     FROM dbo.SalesPlanTable
     WHERE [monthyear] IN ('Apr-25', 'May-25')
     
+2025-08-23 12:13:59,353 | WARNING | Invalid columns blocked: ['UPPER'] | SQL: 
+SELECT
+    [MonthName],
+    SUM(Amount) AS TotalAmount
+FROM dbo.SalesPlanTable
+ WHERE OrderFY = '2025-26' AND UPPER(LEFT([OrderQuarter], 2)) = 'Q2'
+GROUP BY [MonthName]
+ORDER BY TotalAmount DESC
+

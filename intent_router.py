@@ -163,11 +163,18 @@ def extract_filters(q: str) -> List[str]:
     # ----------------------------------------
     # 5. Quarter
     # ----------------------------------------
-    q_match = re.search(r"quarter\s+is\s+(Q[1-4])", q, re.I)
-    if q_match:
+    q_match = re.search(r"\b(?:quarter\s+is|in|for)\s+(Q[1-4])\b", q, re.I)
+    if not q_match:
+        q_match = re.search(r"\bQ([1-4])\b", q, re.I)
+        if q_match:
+            q_val = f"Q{q_match.group(1)}"
+        else:
+            q_val = None
+    else:
         q_val = q_match.group(1).upper()
-        #filters.append(f"[OrderQuarter] LIKE '{q_val}%'")
-        filters.append(f"UPPER(LEFT([OrderQuarter], 2)) = '{q_val}'")
+
+    if q_val:
+        filters.append(f"LEFT([OrderQuarter], 2) = '{q_val}'")
 
     # ----------------------------------------
     # 6. Month Range: "April to June", "Jan - Mar"
@@ -325,22 +332,54 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
         """
 
     # -------------------------------
-    # 2. Growth: "growth between august 2024 and july 2025"
+    # 2. Growth: "growth between FY 2023-24 and FY 2024-25"
     # -------------------------------
     if intent == "growth":
         match = re.search(r"between\s+(.+?)\s+(?:and|to)\s+(.+)", q_clean, re.I)
         if match:
             start_raw, end_raw = match.groups()
-            
-            # Handle "previous", "current", or normalize month/year
+            q_lower = q_clean.lower()  # Define once
+
+            # Case 1: FY Growth
+            if any(word in q_lower for word in ["fy", "fiscal year", "financial year"]):
+                fy1_hint = start_raw.strip()
+                fy2_hint = end_raw.strip()
+
+                fy1 = resolve_fy_hint(fy1_hint) or fy1_hint
+                fy2 = resolve_fy_hint(fy2_hint) or fy2_hint
+
+                # Validate format
+                if not re.match(r"20\d{2}-\d{2}", fy1) or not re.match(r"20\d{2}-\d{2}", fy2):
+                    return None
+
+                filters = extract_filters(q_clean)
+                filters.append(f"OrderFY IN ('{fy1}', '{fy2}')")
+                where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+
+                return f"""
+    SELECT
+        SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END) AS BaseAmount,
+        SUM(CASE WHEN OrderFY = '{fy2}' THEN Amount ELSE 0 END) AS NewAmount,
+        (SUM(CASE WHEN OrderFY = '{fy2}' THEN Amount ELSE 0 END) - 
+        SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END)) AS Absolute_Growth,
+        CASE 
+            WHEN SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END) > 0
+            THEN (SUM(CASE WHEN OrderFY = '{fy2}' THEN Amount ELSE 0 END) - 
+                SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END)) * 100.0 / 
+                SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END)
+            ELSE NULL 
+        END AS Pct_Growth
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    """
+
+            # Case 2: Month Growth (existing logic)
             def resolve_my(text: str) -> str:
                 text = text.strip().lower()
                 if "previous" in text:
-                    # Previous month
-                    prev_month = (date.today().replace(day=1) - timedelta(days=1))
-                    return prev_month.strftime("%b-%y")
+                    prev_month = (date.today().replace(day=1) - timedelta(days=1)).strftime("%b-%y")
+                    return prev_month
                 elif "current" in text:
-                    # Current month
                     return date.today().strftime("%b-%y")
                 else:
                     return normalize_my(text)
@@ -348,27 +387,26 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
             start = resolve_my(start_raw)
             end = resolve_my(end_raw)
 
-            # ✅ Add filters
             filters = extract_filters(q_clean)
             filters.append(f"[monthyear] IN ('{start}', '{end}')")
             where_sql = " WHERE " + " AND ".join(filters)
 
             return f"""
-        SELECT
-            SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END) AS BaseAmount,
-            SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) AS NewAmount,
-            (SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) - 
-            SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)) AS Absolute_Growth,
-            CASE 
-                WHEN SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END) > 0
-                THEN (SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) - 
-                    SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)) * 100.0 / 
-                    SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)
-                ELSE NULL 
-            END AS Pct_Growth
-        FROM dbo.SalesPlanTable
-        {where_sql}
-        """
+    SELECT
+        SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END) AS BaseAmount,
+        SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) AS NewAmount,
+        (SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) - 
+        SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)) AS Absolute_Growth,
+        CASE 
+            WHEN SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END) > 0
+            THEN (SUM(CASE WHEN [monthyear] = '{end}' THEN Amount ELSE 0 END) - 
+                SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)) * 100.0 / 
+                SUM(CASE WHEN [monthyear] = '{start}' THEN Amount ELSE 0 END)
+            ELSE NULL 
+        END AS Pct_Growth
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    """
     # -------------------------------
     # 3. Top N: "List top 10 customers by amount in FY 2025-26"
     # -------------------------------
@@ -471,6 +509,45 @@ FROM dbo.SalesPlanTable
 GROUP BY {select_cols}
 ORDER BY TotalAmount DESC
 """
+    # -------------------------------
+    # 6.1. Compare: "Compare Count of No in apr-25 and apr-24"
+    # -------------------------------
+    # -------------------------------
+    # 1. Compare Count: "compare Count of No in Q1 and Q2"
+    # -------------------------------
+    if intent == "compare" and "count of" in q_clean:
+        # Match: "compare count of No in Q1 and Q2"
+        count_match = re.search(r"count of ([\w\s]+?)(?:\s+(?:in|by)\s+(.+?))?\s+(?:and|vs)\s+(.+)", q_clean, re.I)
+        if count_match:
+            thing = count_match.group(1).strip()
+            val1_raw = count_match.group(2).strip() if count_match.group(2) else count_match.group(3).split()[0]
+            val2_raw = count_match.group(3).strip()
+
+            col = resolve_column(thing) or "DocumentNo"
+
+            # Extract Q1, Q2
+            q1_match = re.search(r"\bQ([1-4])\b", val1_raw, re.I)
+            q2_match = re.search(r"\bQ([1-4])\b", val2_raw, re.I)
+            if not q1_match or not q2_match:
+                return None
+
+            q1 = f"Q{q1_match.group(1)}"
+            q2 = f"Q{q2_match.group(1)}"
+
+            # Get all filters EXCEPT quarter
+            filters = extract_filters(q_clean)
+            # Remove any quarter filter (we handle it in CASE)
+            filters = [f for f in filters if not re.search(r"\bOrderQuarter\b", f, re.I)]
+
+            where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+
+            return f"""
+    SELECT
+        COUNT(CASE WHEN LEFT([OrderQuarter], 2) = '{q1}' THEN [{col}] END) AS [{q1}],
+        COUNT(CASE WHEN LEFT([OrderQuarter], 2) = '{q2}' THEN [{col}] END) AS [{q2}]
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    """
 
     # -------------------------------
     # 6. Count: "Count of No in month year apr-25"
