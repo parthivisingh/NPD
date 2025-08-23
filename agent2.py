@@ -256,10 +256,10 @@ def main():
             print("\n--- Final SQL ---")
             print(sql)
             
-            intent = detect_intent(q)
-            if intent == "compare" and re.search(r"\bWHERE.*?\bmonthyear\b", sql, re.I):
-                print("\n[!] Blocked [monthyear] filter in 'compare' query.")
-                continue
+            # intent = detect_intent(q)
+            # if intent == "compare" and re.search(r"\bWHERE.*?\bmonthyear\b", sql, re.I):
+            #     print("\n[!] Blocked [monthyear] filter in 'compare' query.")
+            #     continue
 
             # Step 2: Validate
             if not guard.validate_sql(sql):

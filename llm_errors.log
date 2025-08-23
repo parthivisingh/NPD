@@ -222,3 +222,52 @@ SELECT
 FROM dbo.SalesPlanTable
 WHERE [monthyear] IN ('Apr-25', 'Apr-24')
 
+2025-08-23 10:41:01,780 | WARNING | Invalid columns blocked: ['-', '-'] | SQL: 
+    SELECT
+        SUM(CASE WHEN OrderFY = '2023-24' THEN Amount ELSE 0 END) AS [2023-24],
+        SUM(CASE WHEN OrderFY = '2024-25' THEN Amount ELSE 0 END) AS [2024-25]
+    FROM dbo.SalesPlanTable
+    WHERE OrderFY IN ('2023-24', '2024-25')
+    
+2025-08-23 10:46:28,073 | WARNING | Invalid columns blocked: ['-', '-'] | SQL: 
+    SELECT
+        SUM(CASE WHEN OrderFY = '2023-24' THEN Amount ELSE 0 END) AS [2023-24],
+        SUM(CASE WHEN OrderFY = '2024-25' THEN Amount ELSE 0 END) AS [2024-25]
+    FROM dbo.SalesPlanTable
+    WHERE OrderFY IN ('2023-24', '2024-25')
+    
+2025-08-23 10:49:18,937 | WARNING | Invalid columns blocked: ['-', '-'] | SQL: 
+    SELECT
+        SUM(CASE WHEN OrderFY = '2023-24' THEN Amount ELSE 0 END) AS [2023-24],
+        SUM(CASE WHEN OrderFY = '2024-25' THEN Amount ELSE 0 END) AS [2024-25]
+    FROM dbo.SalesPlanTable
+    WHERE OrderFY IN ('2023-24', '2024-25')
+    
+2025-08-23 10:57:29,318 | WARNING | Invalid columns blocked: ['-', '-'] | SQL: 
+    SELECT
+        SUM(CASE WHEN OrderFY = '2023-24' THEN Amount ELSE 0 END) AS [2023-24],
+        SUM(CASE WHEN OrderFY = '2024-25' THEN Amount ELSE 0 END) AS [2024-25]
+    FROM dbo.SalesPlanTable
+    WHERE OrderFY IN ('2023-24', '2024-25')
+    
+2025-08-23 11:08:21,980 | WARNING | Invalid columns blocked: ['Apr', 'May'] | SQL: 
+    SELECT
+        SUM(CASE WHEN [monthyear] = 'Apr-25' THEN Amount ELSE 0 END) AS [Apr-25],
+        SUM(CASE WHEN [monthyear] = 'May-25' THEN Amount ELSE 0 END) AS [May-25]
+    FROM dbo.SalesPlanTable
+    WHERE [monthyear] IN ('Apr-25', 'May-25')
+    
+2025-08-23 11:09:27,755 | WARNING | Invalid columns blocked: ['Apr', 'May'] | SQL: 
+    SELECT
+        SUM(CASE WHEN [monthyear] = 'Apr-25' THEN Amount ELSE 0 END) AS [Apr-25],
+        SUM(CASE WHEN [monthyear] = 'May-25' THEN Amount ELSE 0 END) AS [May-25]
+    FROM dbo.SalesPlanTable
+    WHERE [monthyear] IN ('Apr-25', 'May-25')
+    
+2025-08-23 11:10:08,832 | WARNING | Invalid columns blocked: ['Apr', 'May'] | SQL: 
+    SELECT
+        SUM(CASE WHEN [monthyear] = 'Apr-25' THEN Amount ELSE 0 END) AS [Apr-25],
+        SUM(CASE WHEN [monthyear] = 'May-25' THEN Amount ELSE 0 END) AS [May-25]
+    FROM dbo.SalesPlanTable
+    WHERE [monthyear] IN ('Apr-25', 'May-25')
+    

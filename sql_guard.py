@@ -101,9 +101,13 @@ class SQLGuard:
         # Remove comments
         sql_no_comment = re.sub(r"--.*?$|/\*.*?\*/", "", sql, flags=re.MULTILINE | re.DOTALL)
         # Remove strings
+        # Remove strings first — this removes '2023-24', 'Jul-25', etc.
         sql_clean = re.sub(r"'[^']*'", "", sql_no_comment)
         sql_clean = re.sub(r'"[^"]*"', "", sql_clean)
-        sql_clean = re.sub(r"\b\d{2,}\b", "", sql_clean) # Remove numbers
+        # Remove any remaining hyphenated fragments like 2023-24 that became - 
+        sql_clean = re.sub(r"\s*-\s*", " ", sql_clean)  # Replace hyphens with space
+        # Remove standalone numbers
+        sql_clean = re.sub(r"\b\d+\b", "", sql_clean)
         # Common SQL keywords
         SQL_KEYWORDS = {
             "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "HAVING", "AS",
@@ -138,11 +142,7 @@ class SQLGuard:
                 continue
 
             # Skip if it's an alias (after AS)
-            if re.search(rf"\bAS\s+{re.escape(inner)}\b", sql, re.I):
-                continue
-            
-            
-            if re.search(rf"\bAS\s+\[\s*{re.escape(inner)}\s*\]", sql, re.I):
+            if re.search(rf"\bAS\s+(?:\[\s*{re.escape(inner)}\s*\]|\b{re.escape(inner)}\b)", sql, re.I):
                 continue
 
             # Skip if it's a number
@@ -170,10 +170,6 @@ class SQLGuard:
         write_keywords = ("insert", "update", "delete", "alter", "drop", "create", "merge", "exec", "truncate")
         if any(kw in cleaned for kw in write_keywords):
             return False
-        
-        # if cleaned and "compare" in cleaned.lower() and re.search(r"\bmonthyear\b", sql, re.I):
-        #     logger.warning(f"Blocked [monthyear] in compare query: {sql}")
-        #     return False
 
         return True
     
