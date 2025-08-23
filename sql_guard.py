@@ -100,14 +100,16 @@ class SQLGuard:
 
         # Remove comments
         sql_no_comment = re.sub(r"--.*?$|/\*.*?\*/", "", sql, flags=re.MULTILINE | re.DOTALL)
-        # Remove strings
-        # Remove strings first — this removes '2023-24', 'Jul-25', etc.
+
+        # Remove strings (including 'Apr-25', '2023-24')
         sql_clean = re.sub(r"'[^']*'", "", sql_no_comment)
         sql_clean = re.sub(r'"[^"]*"', "", sql_clean)
-        # Remove any remaining hyphenated fragments like 2023-24 that became - 
-        sql_clean = re.sub(r"\s*-\s*", " ", sql_clean)  # Replace hyphens with space
-        # Remove standalone numbers
-        sql_clean = re.sub(r"\b\d+\b", "", sql_clean)
+
+        # Remove hyphenated fragments that could be mis-parsed
+        sql_clean = re.sub(r"\b[A-Za-z]{3}-\d{2}\b", "", sql_clean)  # Remove Apr-25, May-25, etc.
+        sql_clean = re.sub(r"\b\d{4}-\d{2}\b", "", sql_clean)       # Remove 2023-24
+        sql_clean = re.sub(r"\s*-\s*", " ", sql_clean)               # Remove standalone hyphens
+        sql_clean = re.sub(r"\b\d+\b", "", sql_clean)                # Remove standalone numbers
         # Common SQL keywords
         SQL_KEYWORDS = {
             "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "HAVING", "AS",
@@ -132,6 +134,10 @@ class SQLGuard:
             inner = (match.group(1) or match.group(2)).strip()
             if not inner:
                 continue
+            
+            # Skip if it's an alias (after AS, with or without [])
+            if re.search(rf"\bAS\s+(?:\[\s*{re.escape(inner)}\s*\]|\b{re.escape(inner)}\b)", sql, re.I):
+                continue
 
             # Skip if it's a keyword
             if inner.upper() in SQL_KEYWORDS:
@@ -141,9 +147,9 @@ class SQLGuard:
             if inner.lower() in {"dbo", "salesplantable"}:
                 continue
 
-            # Skip if it's an alias (after AS)
-            if re.search(rf"\bAS\s+(?:\[\s*{re.escape(inner)}\s*\]|\b{re.escape(inner)}\b)", sql, re.I):
-                continue
+            # # Skip if it's an alias (after AS)
+            # if re.search(rf"\bAS\s+(?:\[\s*{re.escape(inner)}\s*\]|\b{re.escape(inner)}\b)", sql, re.I):
+            #     continue
 
             # Skip if it's a number
             if re.match(r"^\d+$", inner):
