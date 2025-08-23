@@ -280,3 +280,12 @@ FROM dbo.SalesPlanTable
 GROUP BY [MonthName]
 ORDER BY TotalAmount DESC
 
+2025-08-23 17:44:26,418 | WARNING | Invalid columns blocked: ['IIF', 'IIF'] | SQL: SELECT 
+    [MonthName], 
+    [MFGMode], 
+    SUM([Amount]) AS [Amount], 
+    SUM(IIF([OrderFY] = '2024-25', [Amount], 0)) - SUM(IIF([OrderFY] = '2023-24', [Amount], 0)) AS [Growth]
+FROM 
+    dbo.SalesPlanTable
+WHERE 
+    [MFGMode] = 'PRODUCTION' GROUP BY MonthName, MFGMode, AS, AS, Growth

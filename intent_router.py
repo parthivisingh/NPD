@@ -116,10 +116,15 @@ def extract_filters(q: str) -> List[str]:
     q_lower = q.lower().strip()
 
     # ----------------------------------------
+    # ----------------------------------------
     # 1. OrderFY: current, previous, or explicit
     # ----------------------------------------
     fy_hint = None
-    if any(phrase in q_lower for phrase in ["current fy", "is current", "current fiscal", "this fy"]):
+
+    # Skip if it's a "compare" query — handled by template
+    if "compare" in q_lower:
+        pass
+    elif any(phrase in q_lower for phrase in ["current fy", "is current", "current fiscal", "this fy"]):
         fy_hint = "current"
     elif any(phrase in q_lower for phrase in ["previous fy", "last fy", "prior fy", "previous fiscal", "last fiscal"]):
         fy_hint = "previous"
@@ -338,17 +343,18 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
         match = re.search(r"between\s+(.+?)\s+(?:and|to)\s+(.+)", q_clean, re.I)
         if match:
             start_raw, end_raw = match.groups()
-            q_lower = q_clean.lower()  # Define once
+            q_lower = q_clean.lower()
 
-            # Case 1: FY Growth
-            if any(word in q_lower for word in ["fy", "fiscal year", "financial year"]):
-                fy1_hint = start_raw.strip()
-                fy2_hint = end_raw.strip()
+            # Case 1: FY Growth — if "year", "fy", etc. is mentioned
+            if any(word in q_lower for word in ["fy", "fiscal year", "financial year", "year"]) or \
+            (any(word in q_lower for word in ["previous", "current"]) and "year" in q_lower):
+                # Extract FY hints
+                fy1_hint = "previous" if "previous" in start_raw.lower() else start_raw.strip()
+                fy2_hint = "current" if "current" in end_raw.lower() else end_raw.strip()
 
                 fy1 = resolve_fy_hint(fy1_hint) or fy1_hint
                 fy2 = resolve_fy_hint(fy2_hint) or fy2_hint
 
-                # Validate format
                 if not re.match(r"20\d{2}-\d{2}", fy1) or not re.match(r"20\d{2}-\d{2}", fy2):
                     return None
 
@@ -357,21 +363,21 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
                 where_sql = " WHERE " + " AND ".join(filters) if filters else ""
 
                 return f"""
-    SELECT
-        SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END) AS BaseAmount,
-        SUM(CASE WHEN OrderFY = '{fy2}' THEN Amount ELSE 0 END) AS NewAmount,
-        (SUM(CASE WHEN OrderFY = '{fy2}' THEN Amount ELSE 0 END) - 
-        SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END)) AS Absolute_Growth,
-        CASE 
-            WHEN SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END) > 0
-            THEN (SUM(CASE WHEN OrderFY = '{fy2}' THEN Amount ELSE 0 END) - 
-                SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END)) * 100.0 / 
-                SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END)
-            ELSE NULL 
-        END AS Pct_Growth
-    FROM dbo.SalesPlanTable
-    {where_sql}
-    """
+        SELECT
+            SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END) AS BaseAmount,
+            SUM(CASE WHEN OrderFY = '{fy2}' THEN Amount ELSE 0 END) AS NewAmount,
+            (SUM(CASE WHEN OrderFY = '{fy2}' THEN Amount ELSE 0 END) - 
+            SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END)) AS Absolute_Growth,
+            CASE 
+                WHEN SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END) > 0
+                THEN (SUM(CASE WHEN OrderFY = '{fy2}' THEN Amount ELSE 0 END) - 
+                    SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END)) * 100.0 / 
+                    SUM(CASE WHEN OrderFY = '{fy1}' THEN Amount ELSE 0 END)
+                ELSE NULL 
+            END AS Pct_Growth
+        FROM dbo.SalesPlanTable
+        {where_sql}
+        """
 
             # Case 2: Month Growth (existing logic)
             def resolve_my(text: str) -> str:
@@ -417,27 +423,33 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
             entity = resolve_column(entity_hint.strip()) or "Customer_Name"
             metric = resolve_column(metric_hint.strip()) or "Amount"
 
-            # ✅ Start with all filters (Q1, mfg, customer, previous month)
+            # ✅ Start with all filters
             filters = extract_filters(q_clean)
 
-            # ✅ Add FY filter if present in regex
+            # ✅ Add FY filter
             if fy_hint:
                 fy = resolve_fy_hint(fy_hint)
                 if fy:
                     filters.append(f"OrderFY = '{fy}'")
 
-            # ✅ Build WHERE clause
+            # ✅ Extract all grouping entities (e.g., "by month")
+            entities = extract_entities(q_clean)
+            # ✅ Always include the main entity (e.g., "Items")
+            if entity not in entities:
+                entities = [entity] + entities
+
             where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+            select_cols = ", ".join(f"[{col}]" for col in entities)
+            group_cols = ", ".join(f"[{col}]" for col in entities)
 
             return f"""
-    SELECT TOP {n}
-        [{entity}],
-        SUM([{metric}]) AS Total{metric}
-    FROM dbo.SalesPlanTable
-    {where_sql}
-    GROUP BY [{entity}]
-    ORDER BY Total{metric} DESC
-    """
+        SELECT TOP {n}
+            {select_cols}, SUM([{metric}]) AS Total{metric}
+        FROM dbo.SalesPlanTable
+        {where_sql}
+        GROUP BY {group_cols}
+        ORDER BY Total{metric} DESC
+        """
     # -------------------------------
     # 4. List Rows: "list of no, date, customer..."
     # -------------------------------
