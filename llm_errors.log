@@ -289,3 +289,19 @@ FROM
     dbo.SalesPlanTable
 WHERE 
     [MFGMode] = 'PRODUCTION' GROUP BY MonthName, MFGMode, AS, AS, Growth
+2025-08-23 18:10:39,661 | WARNING | Invalid columns blocked: ['UNBOUNDED', 'UNBOUNDED'] | SQL: SELECT 
+    [Amount], 
+    [MonthName], 
+    SUM([Amount]) OVER (PARTITION BY [MonthName]  GROUP BY MonthName, OVER, PARTITION, BY, MonthName, ORDER, BY, MonthName, ROWS, UNBOUNDED, PRECEDING ORDER BY [MonthName] ROWS UNBOUNDED PRECEDING) AS Growth 
+FROM 
+    dbo.SalesPlanTable 
+WHERE 
+    [MFGMode] = 'Production' 
+    AND CAST(LEFT(OrderFY, 4) AS INT) IN (2024, 2023)
+2025-08-23 18:19:45,326 | WARNING | Invalid columns blocked: ['Count of No in Apr', 'Count of No in Apr', 'Count of No in Apr', 'Count of No in Apr'] | SQL: SELECT 
+    COUNT([DocumentNo]) AS [Count of No in Apr 23], 
+    COUNT([DocumentNo]) AS [Count of No in Apr 24]
+FROM 
+    dbo.SalesPlanTable
+WHERE 
+    [monthyear] = 'Apr-23' OR [monthyear] = 'Apr-24' GROUP BY AS, [Count of No in Apr 23], AS, [Count of No in Apr 24]

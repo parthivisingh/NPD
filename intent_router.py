@@ -300,42 +300,57 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     intent = detect_intent(q_clean)
     
     # -------------------------------
-    # 1. Compare: "Compare Amount in FY 2023-24 vs 2024-25"
+    # 1. Compare Count: "compare Count of No in Apr-25 and May-25"
     # -------------------------------
-    if intent == "compare":
-        match = re.search(r"compare\s+amount\s+in\s+(?:fy\s+)?(\S+)\s+(?:and|vs)\s+(?:fy\s+)?(\S+)", q_clean, re.I)
-        if match:
-            val1_raw, val2_raw = match.groups()
-            val1 = re.sub(r"^fy\s*", "", val1_raw.strip().strip("'\""), flags=re.I).strip()
-            val2 = re.sub(r"^fy\s*", "", val2_raw.strip().strip("'\""), flags=re.I).strip()
+    if intent == "compare" and "count of" in q_clean:
+        # Match: "compare count of No in Apr-25 and May-25"
+        count_match = re.search(r"count of ([\w\s]+?)(?:\s+(?:in|by)\s+(.+?))?\s+(?:and|vs)\s+(.+)", q_clean, re.I)
+        if count_match:
+            thing = count_match.group(1).strip()
+            val1_raw = count_match.group(2).strip() if count_match.group(2) else count_match.group(3).split()[0]
+            val2_raw = count_match.group(3).strip()
 
-            # Start with all filters (mfg, customer, quarter, etc.)
+            col = resolve_column(thing) or "DocumentNo"
+
+            # Case 1: Quarter
+            q1_match = re.search(r"\bQ([1-4])\b", val1_raw, re.I)
+            q2_match = re.search(r"\bQ([1-4])\b", val2_raw, re.I)
+            if q1_match and q2_match:
+                q1 = f"Q{q1_match.group(1)}"
+                q2 = f"Q{q2_match.group(1)}"
+
+                filters = extract_filters(q_clean)
+                filters = [f for f in filters if not re.search(r"\bOrderQuarter\b", f, re.I)]
+
+                where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+
+                return f"""
+    SELECT
+        COUNT(CASE WHEN LEFT([OrderQuarter], 2) = '{q1}' THEN [{col}] END) AS [{q1}],
+        COUNT(CASE WHEN LEFT([OrderQuarter], 2) = '{q2}' THEN [{col}] END) AS [{q2}]
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    """
+
+            # Case 2: Monthyear
+            try:
+                my1 = normalize_my(val1_raw)
+                my2 = normalize_my(val2_raw)
+            except:
+                return None
+
             filters = extract_filters(q_clean)
+            filters = [f for f in filters if not re.search(r"\bmonthyear\b", f, re.I)]
 
-            # Add comparison filter
-            if re.match(r"20\d{2}-\d{2}", val1) and re.match(r"20\d{2}-\d{2}", val2):
-                filters.append(f"OrderFY IN ('{val1}', '{val2}')")
-                return f"""
-        SELECT
-            SUM(CASE WHEN OrderFY = '{val1}' THEN Amount ELSE 0 END) AS [{val1}],
-            SUM(CASE WHEN OrderFY = '{val2}' THEN Amount ELSE 0 END) AS [{val2}]
-        FROM dbo.SalesPlanTable
-        WHERE {" AND ".join(filters)}
-        """
+            where_sql = " WHERE " + " AND ".join(filters) if filters else ""
 
-            # Case 2: monthyear
-            if re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b", val1, re.I):
-                my1 = normalize_my(val1)
-                my2 = normalize_my(val2)
-                filters.append(f"[monthyear] IN ('{my1}', '{my2}')")
-                return f"""
-        SELECT
-            SUM(CASE WHEN [monthyear] = '{my1}' THEN Amount ELSE 0 END) AS [{my1}],
-            SUM(CASE WHEN [monthyear] = '{my2}' THEN Amount ELSE 0 END) AS [{my2}]
-        FROM dbo.SalesPlanTable
-        WHERE {" AND ".join(filters)}
-        """
-
+            return f"""
+    SELECT
+        COUNT(CASE WHEN [monthyear] = '{my1}' THEN [{col}] END) AS [{my1}],
+        COUNT(CASE WHEN [monthyear] = '{my2}' THEN [{col}] END) AS [{my2}]
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    """
     # -------------------------------
     # 2. Growth: "growth between FY 2023-24 and FY 2024-25"
     # -------------------------------
@@ -413,11 +428,20 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     FROM dbo.SalesPlanTable
     {where_sql}
     """
+    
+    print(f"[DEBUG] entity_hint: {entity_hint}")
+    print(f"[DEBUG] entity: {entity}")
+    print(f"[DEBUG] entities: {entities}")
+    print(f"[DEBUG] final entities: {entities}")
+    print(f"[DEBUG] select_cols: {select_cols}")
+    print(f"[DEBUG] group_cols: {group_cols}")
     # -------------------------------
     # 3. Top N: "List top 10 customers by amount in FY 2025-26"
     # -------------------------------
+    
     if intent == "top_n":
-        match = re.search(r"top\s+(\d+)\s+(.+?)\s+by\s+(.+?)(?:\s+in\s+fy|\s+for\s+fy)?\s*(20\d{2}-\d{2}|current|previous)?", q_clean, re.I)
+        #match = re.search(r"top\s+(\d+)\s+(.+?)\s+by\s+(.+?)(?:\s+in\s+fy|\s+for\s+fy)?\s*(20\d{2}-\d{2}|current|previous)?", q_clean, re.I)
+        match = re.search(r"top\s+(\d+)\s+([\w\s]+?)\s+by", q_clean, re.I)
         if match:
             n, entity_hint, metric_hint, fy_hint = match.groups()
             entity = resolve_column(entity_hint.strip()) or "Customer_Name"
@@ -521,45 +545,6 @@ FROM dbo.SalesPlanTable
 GROUP BY {select_cols}
 ORDER BY TotalAmount DESC
 """
-    # -------------------------------
-    # 6.1. Compare: "Compare Count of No in apr-25 and apr-24"
-    # -------------------------------
-    # -------------------------------
-    # 1. Compare Count: "compare Count of No in Q1 and Q2"
-    # -------------------------------
-    if intent == "compare" and "count of" in q_clean:
-        # Match: "compare count of No in Q1 and Q2"
-        count_match = re.search(r"count of ([\w\s]+?)(?:\s+(?:in|by)\s+(.+?))?\s+(?:and|vs)\s+(.+)", q_clean, re.I)
-        if count_match:
-            thing = count_match.group(1).strip()
-            val1_raw = count_match.group(2).strip() if count_match.group(2) else count_match.group(3).split()[0]
-            val2_raw = count_match.group(3).strip()
-
-            col = resolve_column(thing) or "DocumentNo"
-
-            # Extract Q1, Q2
-            q1_match = re.search(r"\bQ([1-4])\b", val1_raw, re.I)
-            q2_match = re.search(r"\bQ([1-4])\b", val2_raw, re.I)
-            if not q1_match or not q2_match:
-                return None
-
-            q1 = f"Q{q1_match.group(1)}"
-            q2 = f"Q{q2_match.group(1)}"
-
-            # Get all filters EXCEPT quarter
-            filters = extract_filters(q_clean)
-            # Remove any quarter filter (we handle it in CASE)
-            filters = [f for f in filters if not re.search(r"\bOrderQuarter\b", f, re.I)]
-
-            where_sql = " WHERE " + " AND ".join(filters) if filters else ""
-
-            return f"""
-    SELECT
-        COUNT(CASE WHEN LEFT([OrderQuarter], 2) = '{q1}' THEN [{col}] END) AS [{q1}],
-        COUNT(CASE WHEN LEFT([OrderQuarter], 2) = '{q2}' THEN [{col}] END) AS [{q2}]
-    FROM dbo.SalesPlanTable
-    {where_sql}
-    """
 
     # -------------------------------
     # 6. Count: "Count of No in month year apr-25"

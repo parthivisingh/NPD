@@ -41,7 +41,9 @@
     "monthyear": ["MY", "month year", "my","apr-25", "apr-24",
       "august 2024", "july 2025", "apr 25", "april 2025"],
 
-    "MPCODE": ["Item", "Product", "MP", "mp code","material code",
+    "Item": ["Item", "Items", "Product"],
+
+    "MPCODE": ["Item", "Product", "MP", "mp code","material code","MP Code", "MPCODE",
       "material", "item code", "product code", "mp code is", "item is", "product is", "items","Items", "Products", "Materials", "materials"],
 
     "PlannedQuarter": ["Quarter", "Order Quarter", "Qtr", "quarter","Q1", "Q2", "Q3", "Q4",
