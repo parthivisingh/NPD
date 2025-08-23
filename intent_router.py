@@ -290,35 +290,38 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     # 1. Compare: "Compare Amount in FY 2023-24 vs 2024-25"
     # -------------------------------
     if intent == "compare":
-        match = re.search(r"compare\s+amount\s+in\s+(?:fy\s+)?(.+?)\s+(?:and|vs)\s+(.+)", q_clean, re.I)
+        # Match: "Compare Amount in 2023-24 and 2024-25" or "FY 2023-24"
+        match = re.search(r"compare\s+amount\s+in\s+(?:fy\s+)?(\S+)\s+(?:and|vs)\s+(?:fy\s+)?(\S+)", q_clean, re.I)
         if match:
             val1_raw, val2_raw = match.groups()
-            val1 = val1_raw.strip().strip("'\"").replace("FY", "").strip()
-            val2 = val2_raw.strip().strip("'\"").replace("FY", "").strip()
-            # val1 = val1_raw.strip().strip("'\"")
-            # val2 = val2_raw.strip().strip("'\"")
+            val1 = val1_raw.strip().strip("'\"")
+            val2 = val2_raw.strip().strip("'\"")
+
+            # Clean "FY" prefix
+            val1 = re.sub(r"^fy\s*", "", val1, flags=re.I).strip()
+            val2 = re.sub(r"^fy\s*", "", val2, flags=re.I).strip()
 
             # Case 1: FY
             if re.match(r"20\d{2}-\d{2}", val1) and re.match(r"20\d{2}-\d{2}", val2):
                 return f"""
-SELECT
-    SUM(CASE WHEN OrderFY = '{val1}' THEN Amount ELSE 0 END) AS [{val1}],
-    SUM(CASE WHEN OrderFY = '{val2}' THEN Amount ELSE 0 END) AS [{val2}]
-FROM dbo.SalesPlanTable
-WHERE OrderFY IN ('{val1}', '{val2}')
-"""
+    SELECT
+        SUM(CASE WHEN OrderFY = '{val1}' THEN Amount ELSE 0 END) AS [{val1}],
+        SUM(CASE WHEN OrderFY = '{val2}' THEN Amount ELSE 0 END) AS [{val2}]
+    FROM dbo.SalesPlanTable
+    WHERE OrderFY IN ('{val1}', '{val2}')
+    """
 
             # Case 2: monthyear
             if re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b", val1, re.I):
                 my1 = normalize_my(val1)
                 my2 = normalize_my(val2)
                 return f"""
-SELECT
-    SUM(CASE WHEN [monthyear] = '{my1}' THEN Amount ELSE 0 END) AS [{my1}],
-    SUM(CASE WHEN [monthyear] = '{my2}' THEN Amount ELSE 0 END) AS [{my2}]
-FROM dbo.SalesPlanTable
-WHERE [monthyear] IN ('{my1}', '{my2}')
-"""
+    SELECT
+        SUM(CASE WHEN [monthyear] = '{my1}' THEN Amount ELSE 0 END) AS [{my1}],
+        SUM(CASE WHEN [monthyear] = '{my2}' THEN Amount ELSE 0 END) AS [{my2}]
+    FROM dbo.SalesPlanTable
+    WHERE [monthyear] IN ('{my1}', '{my2}')
+    """
 
     # -------------------------------
     # 2. Growth: "growth between august 2024 and july 2025"

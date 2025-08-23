@@ -170,6 +170,10 @@ class SQLGuard:
         write_keywords = ("insert", "update", "delete", "alter", "drop", "create", "merge", "exec", "truncate")
         if any(kw in cleaned for kw in write_keywords):
             return False
+        
+        # if cleaned and "compare" in cleaned.lower() and re.search(r"\bmonthyear\b", sql, re.I):
+        #     logger.warning(f"Blocked [monthyear] in compare query: {sql}")
+        #     return False
 
         return True
     
