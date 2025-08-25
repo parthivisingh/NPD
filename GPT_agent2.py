@@ -51,46 +51,6 @@ def get_connection():
         # Scrub password
         redacted = re.sub(r"PWD=[^;]+", "PWD=***", conn_str)
         raise RuntimeError(f"DB connect failed: {e}\nConnStr={redacted}")
-    
-def debug_connection(conn):
-    cur = conn.cursor()
-    
-    # 1. Check current database
-    cur.execute("SELECT DB_NAME() AS db")
-    db = cur.fetchone()[0]
-    print(f"[DEBUG] Connected to database: {db}")
-
-    # 2. Check if table exists
-    cur.execute("""
-        SELECT TABLE_NAME, TABLE_SCHEMA 
-        FROM INFORMATION_SCHEMA.TABLES 
-        WHERE TABLE_NAME = 'SalesPlanTable'
-    """)
-    tables = cur.fetchall()
-    if tables:
-        print(f"[DEBUG] Found SalesPlanTable in: {tables}")
-    else:
-        print("[DEBUG] ❌ SalesPlanTable NOT found in current DB!")
-
-    # 3. Check columns (again, from app)
-    try:
-        cur.execute("""
-            SELECT COLUMN_NAME 
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_NAME = 'SalesPlanTable'
-            ORDER BY ORDINAL_POSITION
-        """)
-        cols = [row[0] for row in cur.fetchall()]
-        print(f"[DEBUG] Columns in SalesPlanTable: {cols[:10]}...")
-    except Exception as e:
-        print(f"[DEBUG] Failed to read columns: {e}")
-
-    # 4. Test a simple query
-    try:
-        cur.execute("SELECT TOP 1 [DocumentNo] FROM dbo.SalesPlanTable")
-        print("[DEBUG] ✅ SELECT [DocumentNo] works!")
-    except Exception as e:
-        print(f"[DEBUG] ❌ SELECT [DocumentNo] failed: {e}")
 
 # ---------------- SCHEMA INTROSPECTION ----------------
 def fetch_schema_text(conn, include_schemas=("dbo",), limit_tables=50) -> str:
@@ -154,7 +114,7 @@ You are a precise SQL assistant for Microsoft SQL Server. Generate ONLY a SELECT
 
 ## Rules
 - Return ONLY the SQL query. No explanations.
-- Never use SELECT * — always list explicit columns.
+- Use SELECT to answer the question.
 - Use ONLY column names from the schema. Do NOT invent or modify column names.
 - Wrap column names in [ ] if they have spaces or are keywords.
 - For "previous month", use [monthyear] = 'Jul-25' (replace with actual value).
@@ -240,155 +200,73 @@ def execute_sql(conn, sql: str):
     rows = cur.fetchall()
     return columns, rows
 
-# ---------------- QUERY FUNCTION ----------------
-def ask_question(q: str, conn, schema_text, guard) -> dict:
+
+def process_question(question: str, conn):
     """
-    Reusable function to process a single question.
+    Process a natural language question into SQL, validate, and (optionally) execute.
+    Returns:
+        sql (str): Final generated SQL query
+        debug_info (dict): Debug details including intent, raw SQL, errors, etc.
     """
+    debug_info = {"raw_sql": None, "intent": None, "errors": []}
+
     try:
+        guard = SQLGuard(conn)
+        schema_text = fetch_schema_text(conn)
+    except Exception as e:
+        debug_info["errors"].append(f"Initialization failed: {e}")
+        return None, debug_info
+
+    try:
+        q = question.strip()
+        if not q:
+            debug_info["errors"].append("Empty question provided.")
+            return None, debug_info
+
         # Step 1: Try template-based SQL
         sql = generate_sql_template(q, schema_text)
 
         if sql is None:
-            print("No template matched. Using LLM with context...")
-
+            # Get intent and synonyms
             intent = detect_intent(q)
-            raw_sql = generate_sql_with_context(q, schema_text, intent, SYNONYM_MAP)
-            print("\n--- Raw LLM Output ---")
-            print(raw_sql)
+            debug_info["intent"] = intent
 
+            # Generate with LLM
+            raw_sql = generate_sql_with_context(q, schema_text, intent, SYNONYM_MAP)
+            debug_info["raw_sql"] = raw_sql
+
+            # Repair SQL
             sql = guard.repair_sql(raw_sql)
         else:
-            print("\n--- Using Template-Based SQL ---")
-            print(sql)
+            debug_info["template_used"] = True
 
-        print("\n--- Final SQL ---")
-        print(sql)
+        debug_info["final_sql"] = sql
 
-        # Validate
+        # Step 2: Validate
         if not guard.validate_sql(sql):
-            return {
-                "sql": sql,
-                "columns": [],
-                "results": [],
-                "error": "Invalid SQL logic or column names"
-            }
+            debug_info["errors"].append("Invalid SQL logic or column names.")
+            return None, debug_info
 
         if not is_safe_sql(sql):
-            return {
-                "sql": sql,
-                "columns": [],
-                "results": [],
-                "error": "Unsafe SQL blocked"
-            }
+            debug_info["errors"].append("Unsafe SQL detected.")
+            return None, debug_info
 
-        # Execute
+        # Step 3: Execute
         cols, rows = execute_sql(conn, sql)
-        return {
-            "sql": sql,
-            "columns": cols,
-            "results": rows,
-            "error": None
-        }
+        df = None
+        if cols and rows:
+            import pandas as pd
+            df = pd.DataFrame(rows, columns=cols)
 
+        return sql, {**debug_info, "result": df}
+
+    except requests.exceptions.RequestException as e:
+        debug_info["errors"].append(f"LLM API request failed: {e}")
+    except pyodbc.Error as e:
+        debug_info["errors"].append(f"SQL execution failed: {e}")
     except Exception as e:
-        return {
-            "sql": "",
-            "columns": [],
-            "results": [],
-            "error": str(e)
-        }
+        import traceback
+        debug_info["errors"].append(f"Unexpected error: {e}")
+        debug_info["traceback"] = traceback.format_exc()
 
-# ---------------- MAIN LOOP ----------------
-def main():
-    print("[*] Connecting to SQL Server…")
-    try:
-        conn = get_connection()
-    except Exception as e:
-        print(f"[ERROR] Connection failed: {e}")
-        return
-    print("[*] Connected.")
-    
-    debug_connection(conn)
-
-    try:
-        guard = SQLGuard(conn)
-        print("[*] SQLGuard initialized. Column resolver ready.")
-    except Exception as e:
-        print(f"[ERROR] Failed to initialize SQLGuard: {e}")
-        return
-
-    print("[*] Reading schema…")
-    try:
-        schema_text = fetch_schema_text(conn)
-    except Exception as e:
-        print(f"[ERROR] Schema fetch failed: {e}")
-        return
-    print("[*] Schema ready.")
-
-    while True:
-        try:
-            q = input("\nAsk about your data (or 'exit'): ").strip()
-            if q.lower() in ("exit", "quit"):
-                break
-            if not q:
-                continue
-
-            # Step 1: Try template-based SQL
-            sql = generate_sql_template(q, schema_text)
-
-            if sql is None:
-                print("No template matched. Using LLM with context...")
-
-                # Get intent and relevant synonyms
-                intent = detect_intent(q)
-
-                # Call LLM with **only relevant synonyms**
-                raw_sql = generate_sql_with_context(q, schema_text, intent, SYNONYM_MAP)
-                print("\n--- Raw LLM Output ---")
-                print(raw_sql)
-
-                # Repair SQL (fix [MMMYY] → [MMMMYY], etc.)
-                sql = guard.repair_sql(raw_sql)
-            else:
-                print("\n--- Using Template-Based SQL ---")
-                print(sql)
-
-            print("\n--- Final SQL ---")
-            print(sql)
-            
-            cols, rows = execute_sql(conn, sql)
-
-            # Step 2: Validate
-            if not guard.validate_sql(sql):
-                print("\n[!] Invalid SQL logic or column names. Refusing to run.")
-                continue
-
-            if not is_safe_sql(sql):
-                print("\n[!] Refusing to run unsafe SQL.")
-                continue
-
-            # Step 3: Execute
-            cols, rows = execute_sql(conn, sql)
-            print("\n--- Results ---")
-            if cols and rows:
-                print("\t".join(cols))
-                for row in rows:
-                    print("\t".join("" if v is None else str(v) for v in row))
-            else:
-                print("(No rows returned)")
-            print("---------------")
-
-        except requests.exceptions.RequestException as e:
-            print(f"[ERROR] LLM API request failed: {e}")
-        except pyodbc.Error as e:
-            print(f"[ERROR] SQL execution failed: {e}")
-        except Exception as e:
-            print(f"[ERROR] Unexpected error: {e}")
-            traceback.print_exc()
-
-    conn.close()
-    print("[*] Bye.")
-
-if __name__ == "__main__":
-    main()
+    return None, debug_info

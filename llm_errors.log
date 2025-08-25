@@ -309,3 +309,95 @@ WHERE
 Original: SELECT [MonthName], [Type], [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [MMMMYY], [monthyear] FROM dbo.SalesPlanTable WHERE [monthyear] = 'Jan-25'
 Fixed: SELECT [MonthName], [Type], [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [monthyear], [monthyear] FROM dbo.SalesPlanTable WHERE [monthyear] = 'Jan-25'
 2025-08-24 11:27:49,244 | WARNING | Invalid columns blocked: ['OrderNo'] | SQL: SELECT [OrderNo] FROM dbo.SalesPlanTable WHERE [SalespersonCode] = 'SHARATH'
+2025-08-25 09:38:19,570 | INFO | Fixed column names:
+Original: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [MMMMYY], [monthyear]
+Fixed: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [monthyear], [monthyear]
+2025-08-25 09:44:19,058 | INFO | Fixed column names:
+Original: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [MMMMYY], [monthyear]
+Fixed: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [monthyear], [monthyear]
+2025-08-25 09:46:54,380 | INFO | Fixed column names:
+Original: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [MMMMYY], [monthyear]
+Fixed: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [monthyear], [monthyear]
+2025-08-25 10:02:04,215 | INFO | Fixed column names:
+Original: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [MMMMYY], [monthyear]
+Fixed: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [monthyear], [monthyear]
+2025-08-25 10:02:45,749 | INFO | Fixed column names:
+Original: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [MMMMYY], [monthyear]
+Fixed: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [monthyear], [monthyear]
+2025-08-25 10:07:22,461 | INFO | Fixed column names:
+Original: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [MMMMYY], [monthyear]
+Fixed: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [monthyear], [monthyear]
+2025-08-25 10:43:05,132 | INFO | Fixed column names:
+Original: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [MMMMYY], [monthyear]
+Fixed: SELECT TOP 10 [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [monthyear], [monthyear]
+2025-08-25 10:43:15,800 | INFO | Fixed column names:
+Original: SELECT 
+    [DocumentNo], 
+    [CustomerCode], 
+    [OrderDate], 
+    [SalespersonCode], 
+    [LineNo], 
+    [MPCODE], 
+    [DocumentDescription], 
+    [MFGMode], 
+    [Type], 
+    [Amount], 
+    [BacklogAmount], 
+    [Customer_Name], 
+    [Grade], 
+    [PlannedQuarter], 
+    [OrderQuarter], 
+    [PlannedDeliveryFY], 
+    CAST([OrderFY] AS INT), 
+    [PlannedMonth], 
+    [MonthName], 
+    [document_Month_Number], 
+    [Order_Month_Number], 
+    [Item], 
+    [Planned_Fy_Flag], 
+    [Ord_Fy_Flag], 
+    [PlannedDeliveryMonthflag], 
+    [OrderMonthflag], 
+    [Quantity], 
+    [OutstandingQuantity], 
+    [QuantityInvoiced], 
+    [PlannedDeliveryDate], 
+    [No_of_Lines], 
+    [orderyear], 
+    [MMMMYY], 
+    [monthyear]
+Fixed: SELECT 
+    [DocumentNo], 
+    [CustomerCode], 
+    [OrderDate], 
+    [SalespersonCode], 
+    [LineNo], 
+    [MPCODE], 
+    [DocumentDescription], 
+    [MFGMode], 
+    [Type], 
+    [Amount], 
+    [BacklogAmount], 
+    [Customer_Name], 
+    [Grade], 
+    [PlannedQuarter], 
+    [OrderQuarter], 
+    [PlannedDeliveryFY], 
+    CAST([OrderFY] AS INT), 
+    [PlannedMonth], 
+    [MonthName], 
+    [document_Month_Number], 
+    [Order_Month_Number], 
+    [Item], 
+    [Planned_Fy_Flag], 
+    [Ord_Fy_Flag], 
+    [PlannedDeliveryMonthflag], 
+    [OrderMonthflag], 
+    [Quantity], 
+    [OutstandingQuantity], 
+    [QuantityInvoiced], 
+    [PlannedDeliveryDate], 
+    [No_of_Lines], 
+    [orderyear], 
+    [monthyear], 
+    [monthyear]
