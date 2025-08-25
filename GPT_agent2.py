@@ -7,7 +7,7 @@ import requests
 from dotenv import load_dotenv
 import traceback
 import json
-
+import pandas as pd
 from intent_router import generate_sql as generate_sql_template
 from intent_router import detect_intent
 from intent_router import SYNONYM_MAP
@@ -192,13 +192,33 @@ def is_safe_sql(sql: str) -> bool:
 
 # ---------------- EXECUTION ----------------
 def execute_sql(conn, sql: str):
-    cur = conn.cursor()
-    cur.execute(sql)
-    if cur.description is None:
-        return [], []
-    columns = [desc[0] for desc in cur.description]
-    rows = cur.fetchall()
-    return columns, rows
+    """
+    Execute SQL against the given connection.
+    Returns:
+        pd.DataFrame if query produces rows,
+        None if no rows or result set,
+        raises pyodbc.Error on SQL issues.
+    """
+    try:
+        cur = conn.cursor()
+        cur.execute(sql)
+
+        # No result set (e.g., INSERT/UPDATE/DELETE)
+        if cur.description is None:
+            conn.commit()  # in case of write operations
+            return None
+
+        columns = [desc[0] for desc in cur.description]
+        rows = cur.fetchall()
+
+        if not rows:
+            return None
+
+        return pd.DataFrame.from_records(rows, columns=columns)
+
+    except pyodbc.Error:
+        raise  # Let process_question handle database errors
+
 
 
 def process_question(question: str, conn):
@@ -251,14 +271,26 @@ def process_question(question: str, conn):
             debug_info["errors"].append("Unsafe SQL detected.")
             return None, debug_info
 
-        # Step 3: Execute
-        cols, rows = execute_sql(conn, sql)
-        df = None
-        if cols and rows:
-            import pandas as pd
-            df = pd.DataFrame(rows, columns=cols)
+        # Step 3: Execute (always returns DataFrame or None)
+        df = execute_sql(conn, sql)
 
-        return sql, {**debug_info, "result": df}
+        if df is None or df.empty:
+            return None, {
+                "raw_sql": sql,
+                "intent": debug_info.get("intent"),
+                "final_sql": sql,
+                "result": None,
+                "errors": [],
+            }
+
+        debug_info = {
+            "raw_sql": sql,
+            "intent": debug_info.get("intent"),
+            "final_sql": sql,
+            "result": df.to_dict(orient="records"),
+            "errors": [],
+        }
+        return sql, debug_info
 
     except requests.exceptions.RequestException as e:
         debug_info["errors"].append(f"LLM API request failed: {e}")

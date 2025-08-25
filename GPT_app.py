@@ -36,8 +36,8 @@ def get_engine():
     return create_engine(f"mssql+pyodbc:///?odbc_connect={params}")
 
 # --- UI ---
-st.set_page_config(page_title="QueryDB PoC", layout="wide")
-st.title("💬 QueryDB - Natural Language to SQL")
+st.set_page_config(page_title="QueryDB", layout="wide")
+st.title("QueryDB - Natural Language to SQL")
 
 user_question = st.text_area("Ask a question about your database:")
 
@@ -51,16 +51,16 @@ if st.button("Run Query"):
             sql_query, debug_info = process_question(user_question, conn)
 
             if not sql_query:
-                st.error("⚠️ No SQL was generated.")
+                st.error("No SQL was generated.")
                 with st.expander("🛠 Debug Info"):
                     st.json(debug_info)
             else:
-                st.subheader("🔎 Generated SQL")
+                st.subheader("Generated SQL")
                 st.code(sql_query, language="sql")
 
                 # Check if process_question already ran query
                 if "result" in debug_info and debug_info["result"] is not None:
-                    st.subheader("📊 Results")
+                    st.subheader("Results")
                     st.dataframe(debug_info["result"])
                 else:
                     # Otherwise, run SQL here

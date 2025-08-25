@@ -150,12 +150,33 @@ def extract_filters(q: str) -> List[str]:
     if mfg_match:
         filters.append(f"[MFGMode] = '{mfg_match.group(1).title()}'")
 
+        
     # ----------------------------------------
     # 3. Customer_Name
     # ----------------------------------------
+    cust_match = None
+
+    # Case 1: "customer is X"
     cust_match = re.search(r"customer\s+is\s+(.+?)(?:\s+(?:and|where|$)|$)", q, re.I)
-    if cust_match:
+
+    # Case 2: "for X" where X is a known customer
+    if not cust_match:
+        # Extract after "for" or "where"
+        for_match = re.search(r"\bfor\s+(.+?)(?:\s+(?:in|by|where|$)|$)", q, re.I)
+        if for_match:
+            potential_cust = for_match.group(1).strip()
+            # Validate against known customers? Or just trust it
+            if len(potential_cust) > 3:  # Basic heuristic
+                cust_match = ("", potential_cust)
+
+    if cust_match and hasattr(cust_match, 'group'):  # If it's a regex match
         customer_value = cust_match.group(1).strip()
+    elif cust_match:  # If it's a tuple from "for X"
+        customer_value = cust_match[1]
+    else:
+        customer_value = None
+
+    if customer_value:
         filters.append(f"[Customer_Name] = '{customer_value}'")
 
     # ----------------------------------------
