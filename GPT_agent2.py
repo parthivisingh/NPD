@@ -228,7 +228,6 @@ INTENT_TO_CHART = {
     "top_n": "bar",
     "compare": "bar",
     "growth": "bar",
-    "list_rows": None,
     "count": "bar",
     "total": "bar",
     "aggregate": "stacked_bar",

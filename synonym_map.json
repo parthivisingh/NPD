@@ -10,7 +10,7 @@
     "OrderDate": ["date", "Date", "order date", "Order Date"],
     "Customer_Name": [
       "Customer", "Customer Name", "Party", "Client","clients",
-      "customer is", "customer name is", "for customer", "party is"
+      "customer is", "customer name is", "for customer", "party is","customer"
     ],
     "BacklogAmount": [
       "Balance Amount", "Outstanding Amount", "Outstanding Value",

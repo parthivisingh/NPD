@@ -109,11 +109,6 @@ if st.button("Run Query"):
                 if "result" in debug_info and debug_info["result"] is not None:
                     st.subheader("Results")
                     st.dataframe(debug_info["result"])
-                else:
-                    # Otherwise, run SQL here
-                    df = pd.read_sql(sql_query, engine)
-                    st.subheader("📊 Results")
-                    st.dataframe(df)
 
                 with st.expander("🛠 Debug Info"):
                     st.json(debug_info)

@@ -149,6 +149,12 @@ def extract_filters(q: str) -> List[str]:
     mfg_match = re.search(r"mfg\s+is\s+([\w-]+)", q, re.I)
     if mfg_match:
         filters.append(f"[MFGMode] = '{mfg_match.group(1).title()}'")
+        
+    # Case 3: "for MFG is X"
+    if "mfg is" in q_lower:
+        mfg_match = re.search(r"mfg\s+is\s+([\w-]+)", q, re.I)
+        if mfg_match:
+            filters.append(f"[MFGMode] = '{mfg_match.group(1).title()}'")
 
         
     # ----------------------------------------
@@ -201,7 +207,61 @@ def extract_filters(q: str) -> List[str]:
 
     if q_val:
         filters.append(f"LEFT([OrderQuarter], 2) = '{q_val}'")
+    
+    # ----------------------------------------
+    # 7. Quarter: Previous, Next, or explicit
+    # ----------------------------------------
+    today = datetime.now()
+    current_month = today.month
+    current_year = today.year
 
+    # Figure out current fiscal quarter (Apr = Q1, Jul = Q2, Oct = Q3, Jan = Q4)
+    def month_to_fq(m):
+        return (m - 4) // 3 + 1  # Apr=1, May=1, Jun=1, Jul=2, ..., Jan=4
+
+    # Current FY: e.g., 2025-26 if Apr 2025 - Mar 2026
+    current_fy_start = current_year if current_month >= 4 else current_year - 1
+    current_fy = f"{current_fy_start}-{str(current_year + 1)[-2:]}"
+
+    # Current fiscal quarter
+    current_fq = month_to_fq(current_month)
+
+    # Handle "previous quarter"
+    if "previous quarter" in q_lower or "last quarter" in q_lower:
+        prev_fq = current_fq - 1
+        prev_fy_start = current_fy_start
+        if prev_fq == 0:
+            prev_fq = 4
+            prev_fy_start = current_fy_start - 1
+        prev_fy = f"{prev_fy_start}-{str(prev_fy_start + 1)[-2:]}"
+        filters.append(f"OrderFY = '{prev_fy}' AND LEFT([OrderQuarter], 2) = 'Q{prev_fq}'")
+
+    # Handle "next quarter"
+    if "next quarter" in q_lower or "coming quarter" in q_lower:
+        next_fq = current_fq + 1
+        next_fy_start = current_fy_start
+        if next_fq == 5:
+            next_fq = 1
+            next_fy_start = current_fy_start + 1
+        next_fy = f"{next_fy_start}-{str(next_fy_start + 1)[-2:]}"
+        filters.append(f"OrderFY = '{next_fy}' AND LEFT([OrderQuarter], 2) = 'Q{next_fq}'")
+
+    # Handle explicit "Q1", "Q2", etc. (already exists, but ensure it doesn't conflict)
+    q_match = re.search(r"\b(?:quarter\s+is|in|for)\s+(Q[1-4])\b", q, re.I)
+    if not q_match:
+        q_match = re.search(r"\bQ([1-4])\b", q, re.I)
+        if q_match:
+            q_val = f"Q{q_match.group(1)}"
+        else:
+            q_val = None
+    else:
+        q_val = q_match.group(1).upper()
+
+    if q_val:
+        # Only add if not already added by "previous"/"next"
+        if not any("OrderQuarter" in f for f in filters):
+            filters.append(f"LEFT([OrderQuarter], 2) = '{q_val}'")
+            
     # ----------------------------------------
     # 6. Month Range: "April to June", "Jan - Mar"
     # ----------------------------------------
@@ -240,7 +300,8 @@ def extract_filters(q: str) -> List[str]:
             except ValueError:
                 pass  # Invalid month
 
-    # ✅ Return at the very end
+
+    # Return at the very last
     return filters
 # -------------------------------
 # Intent Detection
