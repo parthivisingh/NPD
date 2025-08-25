@@ -219,6 +219,23 @@ def execute_sql(conn, sql: str):
     except pyodbc.Error:
         raise  # Let process_question handle database errors
 
+# -------------------------------
+# Intent → Chart Type Mapping
+# -------------------------------
+INTENT_TO_CHART = {
+    # Ranking, comparisons
+    "top_n": "bar",           # Top 10 customers, top products → bar
+    "compare": "bar",         # Compare Apr vs May, FYs → side-by-side bar
+    "growth": "bar",         # Growth over time → line chart (can also be bar for % growth)
+    # Listing and counts
+    "list_rows": None,        # Just a table, no chart
+    "count": "bar",           # Count of docs/orders → bar
+    # Aggregations / totals
+    "total": "bar",           # Total amount by X → bar
+    "aggregate": "stacked_bar", # e.g. sales by FY + Type → stacked bar
+    # Fallback
+    "unknown": None
+}
 
 
 def process_question(question: str, conn):
@@ -300,5 +317,4 @@ def process_question(question: str, conn):
         import traceback
         debug_info["errors"].append(f"Unexpected error: {e}")
         debug_info["traceback"] = traceback.format_exc()
-
     return None, debug_info
