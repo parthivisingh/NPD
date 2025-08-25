@@ -114,7 +114,7 @@ You are a precise SQL assistant for Microsoft SQL Server. Generate ONLY a SELECT
 
 ## Rules
 - Return ONLY the SQL query. No explanations.
-- Never use SELECT * — always list explicit columns.
+- Use SELECT to answer the question.
 - Use ONLY column names from the schema. Do NOT invent or modify column names.
 - Wrap column names in [ ] if they have spaces or are keywords.
 - For "previous month", use [monthyear] = 'Jul-25' (replace with actual value).
@@ -199,65 +199,6 @@ def execute_sql(conn, sql: str):
     columns = [desc[0] for desc in cur.description]
     rows = cur.fetchall()
     return columns, rows
-
-# ---------------- QUERY FUNCTION ----------------
-def ask_question(q: str, conn, schema_text, guard) -> dict:
-    """
-    Reusable function to process a single question.
-    """
-    try:
-        # Step 1: Try template-based SQL
-        sql = generate_sql_template(q, schema_text)
-
-        if sql is None:
-            print("No template matched. Using LLM with context...")
-
-            intent = detect_intent(q)
-            raw_sql = generate_sql_with_context(q, schema_text, intent, SYNONYM_MAP)
-            print("\n--- Raw LLM Output ---")
-            print(raw_sql)
-
-            sql = guard.repair_sql(raw_sql)
-        else:
-            print("\n--- Using Template-Based SQL ---")
-            print(sql)
-
-        print("\n--- Final SQL ---")
-        print(sql)
-
-        # Validate
-        if not guard.validate_sql(sql):
-            return {
-                "sql": sql,
-                "columns": [],
-                "results": [],
-                "error": "Invalid SQL logic or column names"
-            }
-
-        if not is_safe_sql(sql):
-            return {
-                "sql": sql,
-                "columns": [],
-                "results": [],
-                "error": "Unsafe SQL blocked"
-            }
-
-        # Execute
-        cols, rows = execute_sql(conn, sql)
-        return {
-            "sql": sql,
-            "columns": cols,
-            "results": rows,
-            "error": None
-        }
-
-    except Exception as e:
-        return {
-            "sql": "",
-            "columns": [],
-            "results": [],
-            "error": str(e)
-        }
 
 # ---------------- MAIN LOOP ----------------
 def main():

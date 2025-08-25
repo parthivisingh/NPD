@@ -428,20 +428,11 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     FROM dbo.SalesPlanTable
     {where_sql}
     """
-    
-    print(f"[DEBUG] entity_hint: {entity_hint}")
-    print(f"[DEBUG] entity: {entity}")
-    print(f"[DEBUG] entities: {entities}")
-    print(f"[DEBUG] final entities: {entities}")
-    print(f"[DEBUG] select_cols: {select_cols}")
-    print(f"[DEBUG] group_cols: {group_cols}")
     # -------------------------------
     # 3. Top N: "List top 10 customers by amount in FY 2025-26"
     # -------------------------------
-    
     if intent == "top_n":
-        #match = re.search(r"top\s+(\d+)\s+(.+?)\s+by\s+(.+?)(?:\s+in\s+fy|\s+for\s+fy)?\s*(20\d{2}-\d{2}|current|previous)?", q_clean, re.I)
-        match = re.search(r"top\s+(\d+)\s+([\w\s]+?)\s+by", q_clean, re.I)
+        match = re.search(r"top\s+(\d+)\s+(.+?)\s+by\s+(.+?)(?:\s+in\s+fy|\s+for\s+fy)?\s*(20\d{2}-\d{2}|current|previous)?", q_clean, re.I)
         if match:
             n, entity_hint, metric_hint, fy_hint = match.groups()
             entity = resolve_column(entity_hint.strip()) or "Customer_Name"
@@ -465,6 +456,16 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
             where_sql = " WHERE " + " AND ".join(filters) if filters else ""
             select_cols = ", ".join(f"[{col}]" for col in entities)
             group_cols = ", ".join(f"[{col}]" for col in entities)
+
+            # ✅ Debug: Move inside the block
+            print(f"[DEBUG] entity_hint: {entity_hint}")
+            print(f"[DEBUG] entity: {entity}")
+            print(f"[DEBUG] metric_hint: {metric_hint}")
+            print(f"[DEBUG] metric: {metric}")
+            print(f"[DEBUG] fy_hint: {fy_hint}")
+            print(f"[DEBUG] entities: {entities}")
+            print(f"[DEBUG] select_cols: {select_cols}")
+            print(f"[DEBUG] group_cols: {group_cols}")
 
             return f"""
         SELECT TOP {n}
