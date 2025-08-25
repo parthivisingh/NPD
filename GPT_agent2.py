@@ -1,4 +1,4 @@
-# agent2.py
+# GPT_agent2.py
 
 import os
 import re
@@ -219,22 +219,20 @@ def execute_sql(conn, sql: str):
     except pyodbc.Error:
         raise  # Let process_question handle database errors
 
+
+
 # -------------------------------
 # Intent → Chart Type Mapping
 # -------------------------------
 INTENT_TO_CHART = {
-    # Ranking, comparisons
-    "top_n": "bar",           # Top 10 customers, top products → bar
-    "compare": "bar",         # Compare Apr vs May, FYs → side-by-side bar
-    "growth": "bar",         # Growth over time → line chart (can also be bar for % growth)
-    # Listing and counts
-    "list_rows": None,        # Just a table, no chart
-    "count": "bar",           # Count of docs/orders → bar
-    # Aggregations / totals
-    "total": "bar",           # Total amount by X → bar
-    "aggregate": "stacked_bar", # e.g. sales by FY + Type → stacked bar
-    # Fallback
-    "unknown": None
+    "top_n": "bar",
+    "compare": "bar",
+    "growth": "bar",
+    "list_rows": None,
+    "count": "bar",
+    "total": "bar",
+    "aggregate": "stacked_bar",
+    "unknown": None,
 }
 
 
@@ -243,9 +241,9 @@ def process_question(question: str, conn):
     Process a natural language question into SQL, validate, and (optionally) execute.
     Returns:
         sql (str): Final generated SQL query
-        debug_info (dict): Debug details including intent, raw SQL, errors, etc.
+        debug_info (dict): Debug details including intent, raw SQL, chart_type, errors, etc.
     """
-    debug_info = {"raw_sql": None, "intent": None, "errors": []}
+    debug_info = {"raw_sql": None, "intent": None, "errors": [], "chart_type": None}
 
     try:
         guard = SQLGuard(conn)
@@ -264,9 +262,10 @@ def process_question(question: str, conn):
         sql = generate_sql_template(q, schema_text)
 
         if sql is None:
-            # Get intent and synonyms
+            # Get intent
             intent = detect_intent(q)
             debug_info["intent"] = intent
+            debug_info["chart_type"] = INTENT_TO_CHART.get(intent, None)
 
             # Generate with LLM
             raw_sql = generate_sql_with_context(q, schema_text, intent, SYNONYM_MAP)
@@ -276,6 +275,8 @@ def process_question(question: str, conn):
             sql = guard.repair_sql(raw_sql)
         else:
             debug_info["template_used"] = True
+            # default chart type when template is used
+            debug_info["chart_type"] = "bar"
 
         debug_info["final_sql"] = sql
 
@@ -296,17 +297,15 @@ def process_question(question: str, conn):
                 "raw_sql": sql,
                 "intent": debug_info.get("intent"),
                 "final_sql": sql,
+                "chart_type": debug_info.get("chart_type"),
                 "result": None,
                 "errors": [],
             }
 
-        debug_info = {
-            "raw_sql": sql,
-            "intent": debug_info.get("intent"),
-            "final_sql": sql,
+        debug_info.update({
             "result": df.to_dict(orient="records"),
             "errors": [],
-        }
+        })
         return sql, debug_info
 
     except requests.exceptions.RequestException as e:
