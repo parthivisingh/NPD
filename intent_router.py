@@ -144,16 +144,15 @@ def extract_filters(q: str) -> List[str]:
     """
     Extract all filters from the query.
     Returns list of WHERE conditions.
-    Handles:
-    - FY: 'current', 'previous', '2024-25', 'FY 2024-25', 'in FY previous'
-    - MFGMode
-    - Customer_Name
-    - Previous Month
-    - Quarter
-    - Month Range: "April to June"
     """
+    print(f"[DEBUG] extract_filters received: {repr(q)} (type: {type(q)})")
+    if not isinstance(q, str) or not q:
+        return []
+
     filters = []
     q_lower = q.lower().strip()
+    
+    # ... rest of the logic
     
     # 🔹 Special case: FY + Quarter in one phrase (e.g., "FY 2024-25 Q2")
     fyq_fy, fyq_q = normalize_fy_quarter(q)
@@ -213,6 +212,7 @@ def extract_filters(q: str) -> List[str]:
         filters.append(f"[Customer_Name] = '{safe_value}'")
 
     # Case 2: "for X" — could be Customer, FY, Quarter, etc.
+    # Case 2: "for X" — could be Customer, FY, Quarter, etc.
     for_match = re.search(r"\bfor\s+(.+?)(?:\s+(?:in|by|where|$)|$)", q, re.I)
     if for_match:
         potential_val = for_match.group(1).strip()
@@ -229,13 +229,13 @@ def extract_filters(q: str) -> List[str]:
             if my_val:
                 filters.append(f"[monthyear] = '{my_val}'")
             else:
-                fy, q = normalize_fy_quarter(potential_val)
+                fy, quarter = normalize_fy_quarter(potential_val)
                 if fy:
                     filters.append(f"OrderFY = '{fy}'")
-                    if q:
-                        filters.append(f"LEFT([OrderQuarter], 2) = '{q}'")
-                elif q:  # Q2 alone
-                    filters.append(f"LEFT([OrderQuarter], 2) = '{q}'")
+                    if quarter:
+                        filters.append(f"LEFT([OrderQuarter], 2) = '{quarter}'")
+                elif quarter:  # Q2 alone
+                    filters.append(f"LEFT([OrderQuarter], 2) = '{quarter}'")
                 elif (len(potential_val) > 3 and 
                     not re.search(r"\b(?:fy|q[1-4]|\d{4}|\d{2}-\d{2}|quarter|month)\b", potential_val, re.I)):
                     safe_cust = escape_sql(potential_val)
@@ -407,6 +407,10 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     Main entry point: detect intent and return SQL.
     Returns None if no template matches (fallback to LLM).
     """
+    # ✅ Guard: if question is not a string, return None
+    if not isinstance(question, str) or not question:
+        return None
+
     q_orig = question
     q = question.lower().strip()
 
@@ -415,6 +419,8 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     q_clean = re.sub(r"\s*sort by\s+\w+", "", q_clean, flags=re.I).strip()
 
     intent = detect_intent(q_clean)
+    
+    # ... rest of the logic
     
     # -------------------------------
     # 1. Compare Count: "compare Count of No in Apr-25 and May-25"
@@ -469,6 +475,59 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     FROM dbo.SalesPlanTable
     {where_sql}
     """
+    
+    if intent == "compare":
+        # 1. Compare for Col = A and B
+        match = re.search(
+            r"compare\s+([\w\s]+?)\s+(?:for|where)\s+([\w\s]+?)\s*=\s*([\w\s]+?)\s+(?:and|vs)\s+([\w\s]+)",
+            q_clean, re.I
+        )
+        if match:
+            metric_text = match.group(1).strip()
+            col_text = match.group(2).strip()
+            val1 = match.group(3).strip().title()
+            val2 = match.group(4).strip().title()
+
+            metric = resolve_column(metric_text) or "Amount"
+            col = resolve_column(col_text)
+            if not col:
+                return None
+
+            filters = extract_filters(q_clean)
+            filters = [f for f in filters if f"{col} = '{val1}'" not in f and f"{col} = '{val2}'" not in f]
+            where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+
+            return f"""
+        SELECT
+            SUM(CASE WHEN [{col}] = '{val1}' THEN [{metric}] ELSE 0 END) AS {val1},
+            SUM(CASE WHEN [{col}] = '{val2}' THEN [{metric}] ELSE 0 END) AS {val2}
+        FROM dbo.SalesPlanTable
+        {where_sql}
+        """
+
+        # 2. Compare by Dimension
+        by_match = re.search(r"compare\s+([\w\s]+?)\s+(?:by|over|for)\s+([\w\s]+)", q_clean, re.I)
+        if by_match:
+            metric_text = by_match.group(1).strip()
+            col_text = by_match.group(2).strip()
+
+            metric = resolve_column(metric_text) or "Amount"
+            col = resolve_column(col_text)
+            if not col:
+                return None
+
+            filters = extract_filters(q_clean)
+            where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+
+            return f"""
+        SELECT
+            [{col}], SUM([{metric}]) AS Total{metric}
+        FROM dbo.SalesPlanTable
+        {where_sql}
+        GROUP BY [{col}]
+        ORDER BY Total{metric} DESC
+        """
+    
     # -------------------------------
     # 1a. total
     # -------------------------------

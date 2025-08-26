@@ -80,6 +80,62 @@ def render_chart(df: pd.DataFrame, chart_type: str):
 
     else:
         st.write("No suitable chart type suggested.")
+        
+def render_result(df: pd.DataFrame, chart_type: str):
+    if df is None or df.empty:
+        st.warning("⚠️ No results to display.")
+        return
+
+    # Case 1: Single cell result (1 row, 1 col) → show as metric
+    if df.shape == (1, 1):
+        colname = df.columns[0]
+        value = df.iloc[0, 0]
+        st.metric(label=colname, value=value)
+        return
+
+    # Case 2: Only one column but multiple rows → show table
+    if df.shape[1] == 1:
+        st.subheader("Query Results")
+        st.table(df)
+        return
+
+    # Case 3: Normal charting (2+ cols)
+    try:
+        if chart_type == "bar":
+            x_col, y_col = df.columns[0], df.columns[1]
+            chart = alt.Chart(df).mark_bar().encode(
+                x=alt.X(x_col, sort='-y'),
+                y=y_col,
+                tooltip=list(df.columns)
+            )
+            st.altair_chart(chart, use_container_width=True)
+
+        elif chart_type == "stacked_bar" and df.shape[1] >= 3:
+            x_col, color_col, y_col = df.columns[:3]
+            chart = alt.Chart(df).mark_bar().encode(
+                x=x_col,
+                y=y_col,
+                color=color_col,
+                tooltip=list(df.columns)
+            )
+            st.altair_chart(chart, use_container_width=True)
+
+        elif chart_type == "line":
+            x_col, y_col = df.columns[0], df.columns[1]
+            chart = alt.Chart(df).mark_line(point=True).encode(
+                x=x_col,
+                y=y_col,
+                tooltip=list(df.columns)
+            )
+            st.altair_chart(chart, use_container_width=True)
+
+        else:
+            st.table(df)
+
+    except Exception as e:
+        st.error(f"Chart rendering failed: {e}")
+        st.table(df)
+
 
 
 if st.button("Run Query"):
@@ -89,10 +145,6 @@ if st.button("Run Query"):
         try:
             conn = pyodbc.connect(build_conn_str())
             sql_query, debug_info = process_question(user_question, conn)
-
-            # Always show debug info
-            with st.expander("🛠 Debug Info", expanded=True):
-                st.json(debug_info)
 
             # Ensure we handle different result formats
             result = debug_info.get("result")
@@ -104,12 +156,14 @@ if st.button("Run Query"):
 
             # Render chart or table
             chart_type = debug_info.get("chart_type")
-            if chart_type and df is not None and not df.empty:
-                render_chart(df, chart_type)
-            elif df is not None:
-                st.dataframe(df)
+            if df is not None:
+                render_result(df, chart_type)
             else:
                 st.warning("⚠️ No results returned from query.")
+                
+            # Always show debug info
+            with st.expander("🛠 Debug Info", expanded=True):
+                st.json(debug_info)
 
             # Show generated SQL
             final_sql = debug_info.get("final_sql") or sql_query
