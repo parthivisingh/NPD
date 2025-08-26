@@ -96,6 +96,35 @@ def normalize_my(text: str) -> str:
         return f"{mon.title()}-{yr}"
     return text.title()
 
+
+def normalize_fy_quarter(text: str):
+    """
+    Parse fiscal year + quarter like:
+    - 'FY 2024-25 Q2'
+    - 'FY24 Q1'
+    Returns (fy, quarter) or (None, None).
+    """
+    fy, quarter = None, None
+
+    # Match full FY: FY 2024-25
+    fy_match = re.search(r"fy\s*(20\d{2})[-–](\d{2})", text, re.I)
+    if fy_match:
+        fy = f"{fy_match.group(1)}-{fy_match.group(2)}"
+    else:
+        # Shorthand FY24
+        short_match = re.search(r"fy\s*(\d{2})", text, re.I)
+        if short_match:
+            start_year = int("20" + short_match.group(1))
+            fy = f"{start_year}-{(start_year+1) % 100:02d}"
+
+    # Quarter
+    q_match = re.search(r"\bQ([1-4])\b", text, re.I)
+    if q_match:
+        quarter = f"Q{q_match.group(1)}"
+
+    return fy, quarter
+
+
 # -------------------------------
 # Filter Extraction
 # -------------------------------
@@ -114,6 +143,13 @@ def extract_filters(q: str) -> List[str]:
     """
     filters = []
     q_lower = q.lower().strip()
+    
+    # 🔹 Special case: FY + Quarter in one phrase (e.g., "FY 2024-25 Q2")
+    fyq_fy, fyq_q = normalize_fy_quarter(q)
+    if fyq_fy and fyq_q:
+        filters.append(f"OrderFY = '{fyq_fy}' AND OrderQuarter = '{fyq_q}'")
+        return filters  # ✅ Don't let later FY/Quarter logic duplicate
+
 
     # ----------------------------------------
     # ----------------------------------------

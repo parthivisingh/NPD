@@ -61,25 +61,42 @@ class SQLGuard:
             logger.info(f"Fixed column names:\nOriginal: {original}\nFixed: {sql}")
         return sql
 
+        
     def _fix_cast_fy(self, sql: str) -> str:
         """
-        Fix CAST(OrderFY AS INT) → CAST(LEFT(OrderFY, 4) AS INT)
+        Normalize OrderFY handling:
+        1. CAST(OrderFY AS INT) → CAST(LEFT(OrderFY, 4) AS INT)
+        2. CAST(LEFT(OrderFY, 4) AS INT) = YYYY → OrderFY LIKE 'YYYY-%'
         """
-        return re.sub(
+
+        # Step 1: Fix CAST(OrderFY AS INT)
+        sql = re.sub(
             r"CAST\s*\(\s*\[?OrderFY\]?\s+AS\s+INT\s*\)",
             r"CAST(LEFT(OrderFY, 4) AS INT)",
             sql,
             flags=re.IGNORECASE
         )
 
+        # Step 2: Replace CAST(LEFT(OrderFY, 4) AS INT) = YYYY
+        sql = re.sub(
+            r"CAST\(LEFT\(OrderFY,\s*4\)\s*AS\s*INT\)\s*=\s*(\d{4})",
+            lambda m: f"OrderFY LIKE '{m.group(1)}-%'",
+            sql,
+            flags=re.IGNORECASEl
+        )
+
+        return sql
+
+
+    
     def repair_sql(self, sql: str) -> str:
         """
         Apply minimal, safe fixes.
         Order: brackets → columns → CAST → TOP
         """
         fixes = [
-            self._fix_column_names,
             self._fix_cast_fy,
+            self._fix_column_names,
             self._fix_missing_group_by
         ]
         for fix in fixes:
