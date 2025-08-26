@@ -5,14 +5,12 @@ from typing import Dict, List, Optional
 from datetime import datetime, date, timedelta
 import json
 
-ORDER_BY_CANDIDATES = ["OrderDate", "Date", "Order_Date", "DocumentDate"]
-
 def has_column(conn, col: str) -> bool:
     cur = conn.cursor()
     cur.execute("""
         SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
         WHERE TABLE_NAME = 'SalesPlanTable' AND COLUMN_NAME = ?
-    """, col)
+    """, (col,))  # ← (col,) not col
     return cur.fetchone() is not None
 
 # -------------------------------
@@ -192,34 +190,56 @@ def extract_filters(q: str) -> List[str]:
         if mfg_match:
             filters.append(f"[MFGMode] = '{mfg_match.group(1).title()}'")
 
-        
     # ----------------------------------------
-    # 3. Customer_Name
+    # 3. Customer_Name and Generic "for X"
     # ----------------------------------------
-    cust_match = None
+    def escape_sql(value: str) -> str:
+        return value.replace("'", "''")
 
     # Case 1: "customer is X"
     cust_match = re.search(r"customer\s+is\s+(.+?)(?:\s+(?:and|where|$)|$)", q, re.I)
-
-    # Case 2: "for X" where X is a known customer
-    if not cust_match:
-        # Extract after "for" or "where"
-        for_match = re.search(r"\bfor\s+(.+?)(?:\s+(?:in|by|where|$)|$)", q, re.I)
-        if for_match:
-            potential_cust = for_match.group(1).strip()
-            # Validate against known customers? Or just trust it
-            if len(potential_cust) > 3:  # Basic heuristic
-                cust_match = ("", potential_cust)
-
-    if cust_match and hasattr(cust_match, 'group'):  # If it's a regex match
+    if cust_match:
         customer_value = cust_match.group(1).strip()
-    elif cust_match:  # If it's a tuple from "for X"
-        customer_value = cust_match[1]
-    else:
-        customer_value = None
+        safe_value = escape_sql(customer_value)
+        filters.append(f"[Customer_Name] = '{safe_value}'")
 
-    if customer_value:
-        filters.append(f"[Customer_Name] = '{customer_value}'")
+    # Case 2: "for X" — could be Customer, FY, Quarter, etc.
+    for_match = re.search(r"\bfor\s+(.+?)(?:\s+(?:in|by|where|$)|$)", q, re.I)
+    if for_match:
+        potential_val = for_match.group(1).strip()
+        if not potential_val:
+            return
+
+        # Try to resolve as a column
+        resolved_col = resolve_column(potential_val)
+        if resolved_col:
+            safe_val = escape_sql(potential_val)
+            filters.append(f"[{resolved_col}] = '{safe_val}'")
+        else:
+            # Try time patterns
+            fy, q = normalize_fy_quarter(potential_val)
+            if fy:
+                filters.append(f"OrderFY = '{fy}'")
+                if q:
+                    filters.append(f"LEFT([OrderQuarter], 2) = '{q}'")
+                return
+            my_val = normalize_my(potential_val)
+            if my_val:
+                filters.append(f"[monthyear] = '{my_val}'")
+                return
+            # Fallback to customer
+            if len(potential_val) > 3 and not re.search(r"\b(?:fy|q[1-4]|\d{4}|\d{2}-\d{2}|quarter|month)\b", potential_val, re.I):
+                safe_cust = escape_sql(potential_val)
+                filters.append(f"[Customer_Name] = '{safe_cust}'")
+        if resolved_col:
+            safe_val = escape_sql(potential_val)
+            filters.append(f"[{resolved_col}] = '{safe_val}'")
+        else:
+            # Step 2: Fallback to Customer_Name — but avoid time periods
+            if (len(potential_val) > 3 and 
+                not re.search(r"\b(?:fy|q[1-4]|\d{4}|\d{2}-\d{2}|quarter|month)\b", potential_val, re.I)):
+                safe_cust = escape_sql(potential_val)
+                filters.append(f"[Customer_Name] = '{safe_cust}'")
 
     # ----------------------------------------
     # 4. Previous Month
@@ -283,21 +303,6 @@ def extract_filters(q: str) -> List[str]:
         filters.append(f"OrderFY = '{next_fy}' AND LEFT([OrderQuarter], 2) = 'Q{next_fq}'")
 
     # Handle explicit "Q1", "Q2", etc. (already exists, but ensure it doesn't conflict)
-    q_match = re.search(r"\b(?:quarter\s+is|in|for)\s+(Q[1-4])\b", q, re.I)
-    if not q_match:
-        q_match = re.search(r"\bQ([1-4])\b", q, re.I)
-        if q_match:
-            q_val = f"Q{q_match.group(1)}"
-        else:
-            q_val = None
-    else:
-        q_val = q_match.group(1).upper()
-
-    if q_val:
-        # Only add if not already added by "previous"/"next"
-        if not any("OrderQuarter" in f for f in filters):
-            filters.append(f"LEFT([OrderQuarter], 2) = '{q_val}'")
-            
     # ----------------------------------------
     # 6. Month Range: "April to June", "Jan - Mar"
     # ----------------------------------------
@@ -344,10 +349,6 @@ def extract_filters(q: str) -> List[str]:
 # -------------------------------
 
 def detect_intent(q: str) -> str:
-    """
-    Detect high-level intent.
-    Order matters: high-signal verbs first.
-    """
     q = q.lower().strip()
 
     if any(word in q for word in ["compare", "vs", "versus"]):
@@ -356,16 +357,17 @@ def detect_intent(q: str) -> str:
         return "growth"
     if "top" in q or any(word in q for word in ["best", "highest", "largest"]):
         return "top_n"
-    if any(phrase in q for phrase in ["list of", "show me", "give me", "retrieve"]):
+    # Enhanced list detection
+    if any(phrase in q for phrase in ["list of", "show me", "give me", "retrieve"]) or \
+       q.startswith("list ") or "show all" in q:
         return "list_rows"
-    if "count of" in q or "number of" in q:
+    # Enhanced count detection
+    if "count of" in q or "number of" in q or "how many" in q:
         return "count"
     if "total amount" in q or "sum of" in q:
         return "total"
     if "amount by" in q or "sales by" in q:
         return "aggregate"
-    
-
     return "unknown"
 
 # -------------------------------
@@ -575,15 +577,6 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
             select_cols = ", ".join(f"[{col}]" for col in entities)
             group_cols = ", ".join(f"[{col}]" for col in entities)
 
-            # ✅ Debug: Move inside the block
-            print(f"[DEBUG] entity_hint: {entity_hint}")
-            print(f"[DEBUG] entity: {entity}")
-            print(f"[DEBUG] metric_hint: {metric_hint}")
-            print(f"[DEBUG] metric: {metric}")
-            print(f"[DEBUG] fy_hint: {fy_hint}")
-            print(f"[DEBUG] entities: {entities}")
-            print(f"[DEBUG] select_cols: {select_cols}")
-            print(f"[DEBUG] group_cols: {group_cols}")
 
             return f"""
         SELECT TOP {n}
@@ -597,8 +590,15 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     # 4. List Rows: "list of no, date, customer..."
     # -------------------------------
     if intent == "list_rows":
-        cols = re.findall(r"(no|date|customer|amount)", q_clean, re.I)
-        mapped_cols = [resolve_column(c) or c.title() for c in cols]
+        # Try to resolve any word in the query
+        words = re.findall(r"\b\w+\b", q_clean)
+        resolved_cols = [resolve_column(w) for w in words if resolve_column(w)]
+        if resolved_cols:
+            mapped_cols = resolved_cols
+        else:
+            # Fallback to keyword regex
+            fallback_keywords = re.findall(r"(no|date|customer|amount)", q_clean, re.I)
+            mapped_cols = [resolve_column(c) or c.title() for c in fallback_keywords]
         if not mapped_cols:
             return None
 

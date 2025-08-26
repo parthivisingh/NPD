@@ -107,6 +107,7 @@ if st.button("Run Query"):
                 with st.expander("🛠 Debug Info"):
                     st.json(debug_info)
 
+
                 # Check if process_question already ran query
                 if "result" in debug_info and debug_info["result"] is not None:
                     st.subheader("Results")
