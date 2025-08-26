@@ -88,33 +88,37 @@ if st.button("Run Query"):
     else:
         try:
             conn = pyodbc.connect(build_conn_str())
-
             sql_query, debug_info = process_question(user_question, conn)
-            df = pd.DataFrame(debug_info["result"]) if debug_info["result"] else None
-            chart_type = debug_info.get("chart_type")
 
-            if chart_type and df is not None:
+            # Always show debug info
+            with st.expander("🛠 Debug Info", expanded=True):
+                st.json(debug_info)
+
+            # Ensure we handle different result formats
+            result = debug_info.get("result")
+            df = None
+            if isinstance(result, pd.DataFrame):
+                df = result
+            elif isinstance(result, list) and len(result) > 0:
+                df = pd.DataFrame(result)
+
+            # Render chart or table
+            chart_type = debug_info.get("chart_type")
+            if chart_type and df is not None and not df.empty:
                 render_chart(df, chart_type)
             elif df is not None:
                 st.dataframe(df)
-                
-            final_sql = debug_info.get("final_sql")
+            else:
+                st.warning("⚠️ No results returned from query.")
+
+            # Show generated SQL
+            final_sql = debug_info.get("final_sql") or sql_query
             if final_sql:
                 st.subheader("Generated SQL")
                 st.code(final_sql, language="sql")
             else:
-                st.error("No SQL was generated.")
-                with st.expander("🛠 Debug Info"):
-                    st.json(debug_info)
-
-
-                # Check if process_question already ran query
-                if "result" in debug_info and debug_info["result"] is not None:
-                    st.subheader("Results")
-                    st.dataframe(debug_info["result"])
-
-                with st.expander("🛠 Debug Info"):
-                    st.json(debug_info)
+                st.error("❌ No SQL was generated.")
 
         except Exception as e:
             st.error(f"Error: {e}")
+
