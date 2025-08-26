@@ -182,6 +182,7 @@ def extract_filters(q: str) -> List[str]:
             fy_hint = "current"
         else:
             fy_match = re.search(r"fy\s*[=:\s]?\s*(20\d{2}-\d{2})", q, re.I)
+            fy_match = fy_match or re.search(r"\b(?:in|of|for)\s*(20\d{2}-\d{2})", q, re.I)
             if fy_match:
                 fy_hint = fy_match.group(1)
 
@@ -355,16 +356,14 @@ def detect_intent(q: str) -> str:
         return "growth"
     if "top" in q or any(word in q for word in ["best", "highest", "largest"]):
         return "top_n"
-    # Enhanced list detection
-    if any(phrase in q for phrase in ["list of", "show me", "give me", "retrieve"]) or \
-       q.startswith("list ") or "show all" in q:
+    if any(phrase in q for phrase in ["list of", "show me", "give me", "retrieve"]):
         return "list_rows"
-    # Enhanced count detection
     if "count of" in q or "number of" in q or "how many" in q:
         return "count"
-    if "total amount" in q or "sum of" in q:
+    # Enhanced total detection
+    if ("total " in q or "sum of" in q or "show.*amount") and "by" not in q:
         return "total"
-    if "amount by" in q or "sales by" in q:
+    if ("amount by" in q or "sales by" in q or "quantity by" in q or "value by" in q):
         return "aggregate"
     return "unknown"
 
@@ -470,6 +469,29 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     FROM dbo.SalesPlanTable
     {where_sql}
     """
+    # -------------------------------
+    # 1a. total
+    # -------------------------------
+
+    if intent == "total":
+        # Match: "total Quantity in Q1 of 2025-26"
+        metric_match = re.search(r"total\s+([\w\s]+?)\s+(?:in|for|of)", q_clean, re.I)
+        if not metric_match:
+            return None
+
+        metric_text = metric_match.group(1).strip()
+        metric = resolve_column(metric_text) or "Amount"
+
+        filters = extract_filters(q_clean)
+        where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+
+        return f"""
+    SELECT
+        SUM([{metric}]) AS Total{metric}
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    """
+    
     # -------------------------------
     # 2. Growth: "growth between FY 2023-24 and FY 2024-25"
     # -------------------------------
