@@ -97,13 +97,15 @@ if st.button("Run Query"):
                 render_chart(df, chart_type)
             elif df is not None:
                 st.dataframe(df)
-            if not sql_query:
+                
+            final_sql = debug_info.get("final_sql")
+            if final_sql:
+                st.subheader("Generated SQL")
+                st.code(final_sql, language="sql")
+            else:
                 st.error("No SQL was generated.")
                 with st.expander("🛠 Debug Info"):
                     st.json(debug_info)
-            else:
-                st.subheader("Generated SQL")
-                st.code(sql_query, language="sql")
 
                 # Check if process_question already ran query
                 if "result" in debug_info and debug_info["result"] is not None:

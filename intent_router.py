@@ -669,6 +669,35 @@ ORDER BY TotalAmount DESC
     # 6. Count: "Count of No in month year apr-25"
     # -------------------------------
     if intent == "count":
+        # Case 1: "How many unique customers in Q2 2024?"
+        if "unique customers" in q_clean and re.search(r"Q([1-4])\s+(\d{4})", q_clean, re.I):
+            q_match = re.search(r"Q([1-4])\s+(\d{4})", q_clean, re.I)
+            if q_match:
+                q_val = f"Q{q_match.group(1)}"
+                year = int(q_match.group(2))
+
+                # Map calendar year to FY: Q1-Q3 → prev year start, Q4 → same year start
+                if int(q_match.group(1)) <= 3:
+                    fy_start = year - 1
+                else:  # Q4 = Oct-Dec → belongs to FY starting same year
+                    fy_start = year
+                fy = f"{fy_start}-{str(fy_start + 1)[-2:]}"
+
+                # Use extract_filters for any extra filters (e.g., MFG, customer)
+                filters = extract_filters(q_clean)
+                filters.append(f"OrderFY = '{fy}'")
+                filters.append(f"LEFT([OrderQuarter], 2) = '{q_val}'")
+
+                where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+
+                return f"""
+    SELECT
+        COUNT(DISTINCT [Customer_Name]) AS UniqueCustomers
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    """
+
+        # Case 2: "Count of No in apr-25" or "Count of Items"
         match = re.search(r"count of ([\w\s]+?)(?:\s+(?:by|in|where|$))", q_clean, re.I)
         if not match:
             return None
@@ -697,6 +726,7 @@ ORDER BY TotalAmount DESC
     FROM dbo.SalesPlanTable
     {where_sql}
     """
+    
 
     # No template matched
     return None
