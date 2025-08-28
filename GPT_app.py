@@ -93,15 +93,13 @@ def render_result(df: pd.DataFrame, chart_type: str):
         st.metric(label=colname, value=value)
         return
 
-    # Case 2: Only one column but multiple rows → show table
-    if df.shape[1] == 1:
-        st.subheader("Query Results")
-        st.table(df)
-        return
+    # Case 2: One or more columns → always show table (scrollable)
+    st.subheader("Query Results")
+    st.dataframe(df, use_container_width=True)
 
-    # Case 3: Normal charting (2+ cols)
+    # Optional: also show visualization if chart_type is valid
     try:
-        if chart_type == "bar":
+        if chart_type == "bar" and df.shape[1] >= 2:
             x_col, y_col = df.columns[0], df.columns[1]
             chart = alt.Chart(df).mark_bar().encode(
                 x=alt.X(x_col, sort='-y'),
@@ -120,7 +118,7 @@ def render_result(df: pd.DataFrame, chart_type: str):
             )
             st.altair_chart(chart, use_container_width=True)
 
-        elif chart_type == "line":
+        elif chart_type == "line" and df.shape[1] >= 2:
             x_col, y_col = df.columns[0], df.columns[1]
             chart = alt.Chart(df).mark_line(point=True).encode(
                 x=x_col,
@@ -129,13 +127,8 @@ def render_result(df: pd.DataFrame, chart_type: str):
             )
             st.altair_chart(chart, use_container_width=True)
 
-        else:
-            st.table(df)
-
     except Exception as e:
         st.error(f"Chart rendering failed: {e}")
-        st.table(df)
-
 
 
 if st.button("Run Query"):
