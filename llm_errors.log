@@ -687,3 +687,41 @@ WHERE
 2025-08-26 15:58:57,207 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
 2025-08-26 16:00:35,814 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
 2025-08-26 16:01:50,548 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:32:38,169 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:38:05,045 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:39:41,412 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:41:12,618 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:41:12,618 | INFO | Fixed column names:
+Original: SELECT [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [MMMMYY], [monthyear] FROM dbo.SalesPlanTable WHERE [Customer_Name] = 'JAYASREE'
+Fixed: SELECT [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [monthyear], [monthyear] FROM dbo.SalesPlanTable WHERE [Customer_Name] = 'JAYASREE'
+2025-08-26 16:41:43,018 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:41:43,018 | INFO | Fixed column names:
+Original: SELECT [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [MMMMYY], [monthyear] FROM dbo.SalesPlanTable WHERE [Customer_Name] = 'Bharath Electronics Ltd - Bangalore'
+Fixed: SELECT [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [monthyear], [monthyear] FROM dbo.SalesPlanTable WHERE [Customer_Name] = 'Bharath Electronics Ltd - Bangalore'
+2025-08-26 16:42:02,266 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:42:02,266 | INFO | Fixed column names:
+Original: SELECT [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [MMMMYY], [monthyear] FROM dbo.SalesPlanTable WHERE [Customer_Name] = 'Bharat Electronics Ltd  - Bangalore'
+Fixed: SELECT [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [PlannedQuarter], [OrderQuarter], [PlannedDeliveryFY], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [monthyear], [monthyear] FROM dbo.SalesPlanTable WHERE [Customer_Name] = 'Bharat Electronics Ltd  - Bangalore'
+2025-08-26 16:42:23,588 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:43:49,077 | WARNING | Invalid columns blocked: ['InvoicedQuantity'] | SQL: 
+    SELECT
+        SUM([InvoicedQuantity]) AS TotalInvoicedQuantity
+    FROM dbo.SalesPlanTable
+     WHERE [Customer_Name] = 'each orderquarter'
+    
+2025-08-26 16:44:25,053 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:45:15,481 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:47:30,773 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:47:45,327 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:48:00,702 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:48:13,198 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:48:27,368 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 16:49:04,987 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 17:56:10,962 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 17:56:39,257 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 17:56:46,542 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 17:58:32,163 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 17:58:53,918 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 17:59:06,628 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 17:59:27,448 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-26 18:00:00,201 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'

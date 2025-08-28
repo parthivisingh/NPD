@@ -20,8 +20,8 @@
     "Grade": ["grade", "Product Grade", "product grade", "grade is", "item grade"],
     "MFGMode": [
       "MFG", "Mode", "Manufacturing Mode",
-      "mfg is", "mode is", "production", "manufacturing mode",
-      "manufacturing", "mfg mode"
+      "mfg is", "production", "manufacturing mode",
+      "manufacturing", "mfg mode", "MFGMode"
     ],
     "InvoicedQuantity": ["Invoiced", "invoiced qty", "qty invoiced", "invoiced qty is",
                          "invoiced quantity", "qty invoiced is", "invoiced quantity is"],

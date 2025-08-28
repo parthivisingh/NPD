@@ -422,6 +422,58 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     
     # ... rest of the logic
     
+    if intent == "compare":
+    # 1. Compare for Col = A and B
+        match = re.search(
+            r"compare\s+([\w\s]+?)\s+(?:for|where|by)\s+([\w\s]+?)\s*(?:=|is)?\s*([\w\s]+?)\s+(?:and|vs|and|&)\s+([\w\s]+)",
+            q_clean, re.I
+        )
+        if match:
+            metric_text = match.group(1).strip()
+            col_text = match.group(2).strip()
+            val1 = match.group(3).strip().title()
+            val2 = match.group(4).strip().title()
+
+            metric = resolve_column(metric_text) or "Amount"
+            col = resolve_column(col_text)
+            if not col:
+                return None
+
+            filters = extract_filters(q_clean)
+            filters = [f for f in filters if f"{col} = '{val1}'" not in f and f"{col} = '{val2}'" not in f]
+            where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+
+            return f"""
+        SELECT
+            SUM(CASE WHEN [{col}] = '{val1}' THEN [{metric}] ELSE 0 END) AS {val1},
+            SUM(CASE WHEN [{col}] = '{val2}' THEN [{metric}] ELSE 0 END) AS {val2}
+        FROM dbo.SalesPlanTable
+        {where_sql}
+        """
+
+        # 2. Compare by Dimension
+        by_match = re.search(r"compare\s+([\w\s]+?)\s+(?:by|over|for)\s+([\w\s]+)", q_clean, re.I)
+        if by_match:
+            metric_text = by_match.group(1).strip()
+            col_text = by_match.group(2).strip()
+
+            metric = resolve_column(metric_text) or "Amount"
+            col = resolve_column(col_text)
+            if not col:
+                return None
+
+            filters = extract_filters(q_clean)
+            where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+
+            return f"""
+        SELECT
+            [{col}], SUM([{metric}]) AS Total{metric}
+        FROM dbo.SalesPlanTable
+        {where_sql}
+        GROUP BY [{col}]
+        ORDER BY Total{metric} DESC
+        """
+        
     # -------------------------------
     # 1. Compare Count: "compare Count of No in Apr-25 and May-25"
     # -------------------------------
@@ -475,58 +527,6 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     FROM dbo.SalesPlanTable
     {where_sql}
     """
-    
-    if intent == "compare":
-        # 1. Compare for Col = A and B
-        match = re.search(
-            r"compare\s+([\w\s]+?)\s+(?:for|where)\s+([\w\s]+?)\s*=\s*([\w\s]+?)\s+(?:and|vs)\s+([\w\s]+)",
-            q_clean, re.I
-        )
-        if match:
-            metric_text = match.group(1).strip()
-            col_text = match.group(2).strip()
-            val1 = match.group(3).strip().title()
-            val2 = match.group(4).strip().title()
-
-            metric = resolve_column(metric_text) or "Amount"
-            col = resolve_column(col_text)
-            if not col:
-                return None
-
-            filters = extract_filters(q_clean)
-            filters = [f for f in filters if f"{col} = '{val1}'" not in f and f"{col} = '{val2}'" not in f]
-            where_sql = " WHERE " + " AND ".join(filters) if filters else ""
-
-            return f"""
-        SELECT
-            SUM(CASE WHEN [{col}] = '{val1}' THEN [{metric}] ELSE 0 END) AS {val1},
-            SUM(CASE WHEN [{col}] = '{val2}' THEN [{metric}] ELSE 0 END) AS {val2}
-        FROM dbo.SalesPlanTable
-        {where_sql}
-        """
-
-        # 2. Compare by Dimension
-        by_match = re.search(r"compare\s+([\w\s]+?)\s+(?:by|over|for)\s+([\w\s]+)", q_clean, re.I)
-        if by_match:
-            metric_text = by_match.group(1).strip()
-            col_text = by_match.group(2).strip()
-
-            metric = resolve_column(metric_text) or "Amount"
-            col = resolve_column(col_text)
-            if not col:
-                return None
-
-            filters = extract_filters(q_clean)
-            where_sql = " WHERE " + " AND ".join(filters) if filters else ""
-
-            return f"""
-        SELECT
-            [{col}], SUM([{metric}]) AS Total{metric}
-        FROM dbo.SalesPlanTable
-        {where_sql}
-        GROUP BY [{col}]
-        ORDER BY Total{metric} DESC
-        """
     
     # -------------------------------
     # 1a. total
