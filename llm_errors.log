@@ -725,3 +725,66 @@ Fixed: SELECT [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [Lin
 2025-08-26 17:59:06,628 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
 2025-08-26 17:59:27,448 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
 2025-08-26 18:00:00,201 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:04:22,848 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:04:47,819 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:04:51,315 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:06:12,219 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:29:05,112 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:31:49,809 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:32:11,871 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:41:43,827 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:42:00,250 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:42:32,381 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:42:32,385 | WARNING | Invalid columns blocked: ['SUBSTRING', 'SUBSTRING'] | SQL: SELECT [OrderFY], [MonthName], [BacklogAmount] FROM dbo.SalesPlanTable WHERE CAST([OrderFY] AS INT) = CAST(SUBSTRING([monthyear], 4, 2) + SUBSTRING([monthyear], 1, 2) AS INT)
+2025-08-28 12:52:09,368 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:52:33,928 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:52:48,372 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:52:56,218 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:55:45,722 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:59:39,155 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 12:59:52,629 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 16:35:03,172 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 16:36:05,325 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 16:38:24,996 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 16:39:23,663 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 16:40:35,766 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 16:40:43,745 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 16:40:58,387 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 16:41:05,450 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 17:27:17,780 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 17:28:27,254 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 17:54:38,926 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 17:55:00,425 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 17:55:04,111 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 18:57:21,093 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 18:57:35,326 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 19:09:36,868 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 19:09:47,680 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 19:09:54,135 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 19:10:00,987 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 19:10:15,024 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 19:10:20,595 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-28 20:39:10,345 | ERROR | Task exception was never retrieved
+future: <Task finished name='Task-109129' coro=<WebSocketProtocol13.write_message.<locals>.wrapper() done, defined at C:\Users\KIRTI\miniconda3\envs\sqlchat-poc\lib\site-packages\tornado\websocket.py:1111> exception=WebSocketClosedError()>
+Traceback (most recent call last):
+  File "C:\Users\KIRTI\miniconda3\envs\sqlchat-poc\lib\site-packages\tornado\websocket.py", line 1113, in wrapper
+    await fut
+tornado.iostream.StreamClosedError: Stream is closed
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\KIRTI\miniconda3\envs\sqlchat-poc\lib\site-packages\tornado\websocket.py", line 1115, in wrapper
+    raise WebSocketClosedError()
+tornado.websocket.WebSocketClosedError
+2025-08-29 10:01:07,594 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-29 10:01:23,134 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-29 10:01:40,095 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-29 10:01:55,372 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-29 10:07:48,247 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-29 10:10:26,586 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-29 10:10:41,351 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-29 10:11:26,598 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-29 10:11:40,460 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-29 10:13:37,047 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-29 10:15:08,875 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'

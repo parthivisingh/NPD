@@ -58,7 +58,7 @@ if "chart_type" not in st.session_state:
 st.sidebar.header("Query History")
 
 if st.session_state["history"]:
-    for i, q in enumerate(reversed(st.session_state["history"])):
+    for i, q in enumerate(reversed(st.session_state["history"])):  # show latest first
         if st.sidebar.button(q, key=f"hist_{i}"):
             # Load query into text box and clear results
             st.session_state["user_question"] = q
@@ -72,17 +72,17 @@ else:
 # ---------------- Main Page ----------------
 st.title("Ask your database")
 
-# Input field
+# Input field (FIX: key now matches session state)
 user_question = st.text_area(
-    "Enter your query:", 
-    value=st.session_state["user_question"], 
-    key="user_question_input"
+    "Enter your query:",
+    value=st.session_state["user_question"],
+    key="user_question"
 )
 
-# Ask button
+# Ask button (FIX: use local var for button color logic)
 ask_btn = st.button(
-    "Ask", 
-    type="primary" if st.session_state["user_question"] else "secondary"
+    "Ask",
+    type="primary" if user_question.strip() else "secondary"
 )
 
 # ---------------- Handle Query Execution ----------------
@@ -91,7 +91,6 @@ def render_result(df: pd.DataFrame, chart_type: str):
     if df is None or df.empty:
         st.warning("⚠️ No results to display.")
         return
-
     # Optional Graph Output
     if chart_type and df.shape[1] >= 2:
         try:
@@ -130,27 +129,31 @@ def render_result(df: pd.DataFrame, chart_type: str):
     st.subheader("Tabular Output")
     st.dataframe(df, use_container_width=True, height=400)
 
-
 if ask_btn:
     if not user_question.strip():
         st.warning("Please enter a question first.")
     else:
+        # Add to query history immediately
+        if user_question not in st.session_state["history"]:
+            st.session_state["history"].append(user_question)
+            # force sidebar to reflect immediately
+            st.sidebar.write(f"➕ Added: {user_question}")
+
         try:
             conn = pyodbc.connect(build_conn_str())
             sql_query, debug_info = process_question(user_question, conn)
 
-            # Save query to history
-            if user_question not in st.session_state["history"]:
-                st.session_state["history"].append(user_question)
-
-            # Store results in session
-            result = debug_info.get("result")
+            # Handle results
             df = None
-            if isinstance(result, pd.DataFrame):
-                df = result
-            elif isinstance(result, list) and len(result) > 0:
-                df = pd.DataFrame(result)
+            if debug_info.get("result") is not None:
+                if isinstance(debug_info["result"], pd.DataFrame):
+                    df = debug_info["result"]
+                elif isinstance(debug_info["result"], list):
+                    df = pd.DataFrame(debug_info["result"])
+            elif sql_query:
+                df = pd.read_sql(sql_query, conn)
 
+            # Save to session
             st.session_state["results"] = df
             st.session_state["debug_info"] = debug_info
             st.session_state["chart_type"] = debug_info.get("chart_type")

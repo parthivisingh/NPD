@@ -258,7 +258,7 @@ def process_question(question: str, conn):
             return None, debug_info
 
         # Step 1: Try template-based SQL
-        sql = generate_sql_template(q, schema_text)
+        sql = generate_sql_template(q, schema_text, conn=conn)
 
         if sql is None:
             # Get intent

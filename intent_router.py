@@ -349,7 +349,7 @@ def extract_filters(q: str) -> List[str]:
 
 def detect_intent(q: str) -> str:
     q = q.lower().strip()
-
+    
     if any(word in q for word in ["compare", "vs", "versus"]):
         return "compare"
     if any(word in q for word in ["growth", "increase", "delta", "change"]):
@@ -360,16 +360,14 @@ def detect_intent(q: str) -> str:
         return "list_rows"
     if "count of" in q or "number of" in q or "how many" in q:
         return "count"
-    if ("total " in q or "sum of" in q or "show.*amount") and "by" not in q:
+    if (re.search(r"\b(total|sum|show)\b", q) and 
+        re.search(r"\b(amount|sales|quantity|value|backlog)\b", q)) and "by" not in q:
         return "total"
+    # if ("total " in q or "sum of" in q or "show.*amount") and "by" not in q:
+    #     return "total"
     if ("amount by" in q or "sales by" in q or "quantity by" in q or "value by" in q):
         return "aggregate"
-
-    # -------------------------------
     # NEW: Column Lookup Intent
-    # -------------------------------
-    # Match: "amount", "customer name", "mfg", "fy", etc.
-    # But not if it's part of another intent
     if re.match(r"^(show|get|list|what is|what are|tell me about|give me|display|fetch)?\s*[\w\s]+$", q):
         return "column_lookup"
 
@@ -427,8 +425,59 @@ def generate_sql(question: str, schema_text: str = None, conn=None) -> Optional[
     q_clean = re.sub(r"\s*sort by\s+\w+", "", q_clean, flags=re.I).strip()
 
     intent = detect_intent(q_clean)
+
     
-    # ... rest of the logic
+    # -------------------------------
+    # 7. Column Lookup: "amount", "customer name", "fy", etc.
+    # -------------------------------
+    if intent == "column_lookup":
+        # Remove verbs
+        clean_text = re.sub(r"^(show|get|list|what is|what are|tell me about|give me|display|fetch|display)\s+", "", q_clean, flags=re.I).strip()
+
+        if not clean_text:
+            return None
+
+        col = resolve_column(clean_text)
+        if not col:
+            return None
+
+        if not has_column(conn, col):
+            return None
+
+        # Determine if numeric
+        numeric_keywords = {"amount", "quantity", "backlog", "value", "price", "cost", "sum", "total", "count", "number"}
+        is_numeric = any(k in col.lower() for k in numeric_keywords)
+
+        # Refine using schema_text if available
+        if schema_text:
+            numeric_types = r"(int|decimal|numeric|float|real|money|bigint|smallint)"
+            for line in schema_text.splitlines():
+                line = line.strip()
+                if re.search(rf"\b{re.escape(col)}\b", line, re.I):
+                    if re.search(numeric_types, line, re.I):
+                        is_numeric = True
+                    else:
+                        is_numeric = False
+                    break
+
+        filters = extract_filters(q_orig)
+        where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+
+        if is_numeric:
+            return f"""
+    SELECT
+        SUM([{col}]) AS Total{col}
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    """
+        else:
+            return f"""
+    SELECT DISTINCT
+        [{col}]
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    ORDER BY [{col}]
+    """
     
     if intent == "compare":
     # 1. Compare for Col = A and B
@@ -822,57 +871,6 @@ def generate_sql(question: str, schema_text: str = None, conn=None) -> Optional[
         COUNT([{col}]) AS Count_{col}
     FROM dbo.SalesPlanTable
     {where_sql}
-    """
-    # -------------------------------
-    # 7. Column Lookup: "amount", "customer name", "fy", etc.
-    # -------------------------------
-    if intent == "column_lookup":
-        # Remove verbs
-        clean_text = re.sub(r"^(show|get|list|what is|what are|tell me about|give me|display|fetch|display)\s+", "", q_clean, flags=re.I).strip()
-
-        if not clean_text:
-            return None
-
-        col = resolve_column(clean_text)
-        if not col:
-            return None
-
-        if not has_column(conn, col):
-            return None
-
-        # Determine if numeric
-        numeric_keywords = {"amount", "quantity", "backlog", "value", "price", "cost", "sum", "total", "count", "number"}
-        is_numeric = any(k in col.lower() for k in numeric_keywords)
-
-        # Refine using schema_text if available
-        if schema_text:
-            numeric_types = r"(int|decimal|numeric|float|real|money|bigint|smallint)"
-            for line in schema_text.splitlines():
-                line = line.strip()
-                if re.search(rf"\b{re.escape(col)}\b", line, re.I):
-                    if re.search(numeric_types, line, re.I):
-                        is_numeric = True
-                    else:
-                        is_numeric = False
-                    break
-
-        filters = extract_filters(q_orig)
-        where_sql = " WHERE " + " AND ".join(filters) if filters else ""
-
-        if is_numeric:
-            return f"""
-    SELECT
-        SUM([{col}]) AS Total{col}
-    FROM dbo.SalesPlanTable
-    {where_sql}
-    """
-        else:
-            return f"""
-    SELECT DISTINCT
-        [{col}]
-    FROM dbo.SalesPlanTable
-    {where_sql}
-    ORDER BY [{col}]
     """
     # No template matched
     return None
