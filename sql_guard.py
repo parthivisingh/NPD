@@ -82,12 +82,14 @@ class SQLGuard:
             r"CAST\(LEFT\(OrderFY,\s*4\)\s*AS\s*INT\)\s*=\s*(\d{4})",
             lambda m: f"OrderFY LIKE '{m.group(1)}-%'",
             sql,
-            flags=re.IGNORECASEl
+            flags=re.IGNORECASE
         )
 
         return sql
 
-
+    
+    def _deduplicate_conditions(self, sql: str) -> str:
+        return re.sub(r"\b(\w+\s*(?:=|LIKE)\s*'[^']*')\s+AND\s+\1", r"\1", sql, flags=re.I)
     
     def repair_sql(self, sql: str) -> str:
         """
@@ -97,7 +99,8 @@ class SQLGuard:
         fixes = [
             self._fix_cast_fy,
             self._fix_column_names,
-            self._fix_missing_group_by
+            self._fix_missing_group_by,
+            self._deduplicate_conditions
         ]
         for fix in fixes:
             try:
@@ -105,6 +108,7 @@ class SQLGuard:
             except Exception as e:
                 logger.warning(f"Error in {fix.__name__}: {e}")
         return sql.strip()
+
 
     def validate_sql(self, sql: str) -> bool:
         """

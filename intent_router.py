@@ -164,7 +164,6 @@ def extract_filters(q: str) -> List[str]:
 
 
     # ----------------------------------------
-    # ----------------------------------------
     # 1. OrderFY: current, previous, or explicit
     # ----------------------------------------
     fy_hint = None
@@ -176,22 +175,28 @@ def extract_filters(q: str) -> List[str]:
         fy_hint = "current"
     elif any(phrase in q_lower for phrase in ["previous fy", "last fy", "prior fy", "previous fiscal", "last fiscal"]):
         fy_hint = "previous"
-    elif "fy" in q_lower:
-        if "previous" in q_lower:
-            fy_hint = "previous"
-        elif "current" in q_lower:
-            fy_hint = "current"
+    else:
+        # Match FY with "fy"
+        fy_match = re.search(r"fy\s*[=:\s]?\s*(20\d{2}-\d{2})", q, re.I)
+        # Match "for 2024-25"
+        fy_match = fy_match or re.search(r"\b(?:in|of|for)\s*(20\d{2}-\d{2})", q, re.I)
+        # Match standalone "2024-25"
+        fy_match = fy_match or re.search(r"\b(20\d{2}-\d{2})\b", q, re.I)
+        if fy_match:
+            fy_hint = fy_match.group(1)
         else:
-            fy_match = re.search(r"fy\s*[=:\s]?\s*(20\d{2}-\d{2})", q, re.I)
-            fy_match = fy_match or re.search(r"\b(?:in|of|for)\s*(20\d{2}-\d{2})", q, re.I)
-            if fy_match:
-                fy_hint = fy_match.group(1)
+            # Match standalone 4-digit year like "2024"
+            year_match = re.search(r"\b(20\d{2})\b", q, re.I)
+            if year_match:
+                year = int(year_match.group(1))
+                fy_hint = f"{year}-{str(year+1)[-2:]}"
 
     if fy_hint:
         fy = resolve_fy_hint(fy_hint)
         if fy:
-            filters.append(f"OrderFY = '{fy}'")
-
+            fy_filter = f"OrderFY = '{fy}'"
+            if not any("OrderFY" in f for f in filters):
+                filters.append(fy_filter)
     # ----------------------------------------
     # 2. MFGMode
     # ----------------------------------------
