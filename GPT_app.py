@@ -161,37 +161,14 @@ ask_btn = st.button(
 #             st.error(f"📊 Chart rendering failed: {e}")
 
 def render_result(df: pd.DataFrame, chart_type: str):
-    """Render charts and data output dynamically based on column count."""
+    """Render charts and data output with dynamic table height."""
     if df is None or df.empty:
         st.warning("⚠️ No data returned from the query.")
         return
 
-
     num_cols = df.shape[1]
     num_rows = df.shape[0]
 
-    if num_cols == 1:
-        col_name = df.columns[0]
-        num_rows = len(df)
-
-        st.subheader(col_name)
-
-        if num_rows > 10:
-            st.dataframe(df, use_container_width=True, height=400)
-        else:
-            # Keep it simple: plain text, one per line
-            values = df.iloc[:, 0].dropna().astype(str).tolist()
-            for val in values:
-                st.text(val)
-
-    elif num_cols <= 10:
-        st.write(f"Showing {num_rows} row(s) with {num_cols} columns.")
-        st.dataframe(df, use_container_width=True, height=400)
-
-    else:  # More than 10 columns
-        st.write(f"Showing wide result with **{num_cols} columns** and {num_rows} rows (scroll horizontally):")
-        st.dataframe(df, use_container_width=True, height=400)
-    
     # Show chart if applicable
     if chart_type and len(df) > 0:
         try:
@@ -224,14 +201,49 @@ def render_result(df: pd.DataFrame, chart_type: str):
                 st.altair_chart(chart, use_container_width=True)
 
         except Exception as e:
-            st.error(f"📊 Chart rendering failed: {e}")
+            st.error(f"Chart rendering failed: {e}")
+
+    # ---------------- Data Output ----------------
+
+    # Dynamic display based on column and row count
+    if num_cols == 1:
+        col_name = df.columns[0]
+        st.subheader(col_name)
+
+        if num_rows > 10:
+            # Scrollable fixed-height table for long lists
+            height = 400  # Enough to show ~10 rows
+            st.dataframe(df, use_container_width=True, height=height)
+        else:
+            # Short list: plain text, one per line
+            values = df.iloc[:, 0].dropna().astype(str).tolist()
+            for val in values:
+                st.text(val)
+
+    else:
+        # For 2+ columns: always show as table, but dynamic height
+        row_height = 35
+        header_height = 36
+        dynamic_height = header_height + (num_rows * row_height)
+        # Cap height at 400px for large tables
+        height = min(400, dynamic_height)
+
+        if num_cols > 10:
+            st.write(f"Showing wide result with **{num_cols} columns** and {num_rows} rows (scroll horizontally):")
+
+        st.dataframe(
+            df,
+            use_container_width=True,
+            height=height,
+            hide_index=True  # Optional: cleaner look
+        )
 
 
 # ---------------- Handle Query Execution ----------------
 if ask_btn:
     q = st.session_state["user_question"].strip()
     if not q:
-        st.warning("❗ Please enter a question before clicking 'Ask'.")
+        st.warning("Please enter a question before clicking 'Ask'.")
     else:
         # Add to history if new
         if q not in st.session_state["history"]:
