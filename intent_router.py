@@ -402,7 +402,7 @@ def extract_entities(q: str) -> List[str]:
 # Main SQL Generator
 # -------------------------------
 
-def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
+def generate_sql(question: str, schema_text: str = None, conn=None) -> Optional[str]:
     """
     Main entry point: detect intent and return SQL.
     Returns None if no template matches (fallback to LLM).
@@ -815,7 +815,60 @@ def generate_sql(question: str, schema_text: str = None) -> Optional[str]:
     FROM dbo.SalesPlanTable
     {where_sql}
     """
-    
+    # -------------------------------
+    # 7. Fallback: If user enters just a column name
+    # -------------------------------
+    if intent == "unknown" and conn:
+        # Remove common prefixes
+        clean_text = re.sub(r"^(show|get|list|what is|what are|tell me about|give me|display|fetch)\s+", "", q_clean, flags=re.I).strip()
 
+        # Allow 1-2 words only
+        words = clean_text.split()
+        if len(words) == 0 or len(words) > 2:
+            pass  # Too long
+        else:
+            col = resolve_column(clean_text)
+            if col and has_column(conn, col):
+                # Determine if numeric
+                # Keywords that suggest numeric
+                numeric_keywords = {"amount", "quantity", "backlog", "value", "price", "cost", "sum", "total", "count", "number"}
+                is_numeric = any(k in col.lower() for k in numeric_keywords)
+
+                # Refine using schema_text if available
+                if schema_text:
+                    numeric_types = r"(int|decimal|numeric|float|real|money|bigint|smallint)"
+                    found = False
+                    for line in schema_text.splitlines():
+                        line = line.strip()
+                        # Match column name exactly
+                        if re.search(rf"\b{re.escape(col)}\b", line, re.I):
+                            found = True
+                            if re.search(numeric_types, line, re.I):
+                                is_numeric = True
+                            else:
+                                is_numeric = False
+                            break
+                    # If column found but no type → assume text
+                    if found and not is_numeric:
+                        is_numeric = False
+
+                filters = extract_filters(q_orig)
+                where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+
+                if is_numeric:
+                    return f"""
+SELECT
+    SUM([{col}]) AS Total{col}
+FROM dbo.SalesPlanTable
+{where_sql}
+"""
+                else:
+                    return f"""
+SELECT DISTINCT
+    [{col}]
+FROM dbo.SalesPlanTable
+{where_sql}
+ORDER BY [{col}]
+"""
     # No template matched
     return None
