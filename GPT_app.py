@@ -86,7 +86,7 @@ st.title("Ask Your Database")
 
 # Text input synchronized with session state
 user_question = st.text_area(
-    "Enter your natural language question:",
+    "Enter query:",
     key="user_question"  # Streamlit auto-syncs with st.session_state["user_question"]
 )
 # Ask Button
@@ -163,15 +163,14 @@ def render_result(df: pd.DataFrame, chart_type: str):
         # Cap height at 400px for large tables
         height = min(400, dynamic_height)
 
-        if num_cols > 10:
-            st.write(f"Showing wide result with **{num_cols} columns** and {num_rows} rows (scroll horizontally):")
-
         st.dataframe(
             df,
             use_container_width=True,
             height=height,
             hide_index=True  # Optional: cleaner look
         )
+    if num_cols > 10:
+        st.caption(f"**{num_cols} columns x** {num_rows} rows")
 
 
 # ---------------- Handle Query Execution ----------------
@@ -236,6 +235,6 @@ if st.session_state["results"] is not None:
         if st.session_state["debug_info"]
         else None
     )
-    if final_sql:
-        st.subheader("🔧 Generated SQL")
-        st.code(final_sql, language="sql")
+    # if final_sql:
+    #     st.subheader("🔧 Generated SQL")
+    #     st.code(final_sql, language="sql")

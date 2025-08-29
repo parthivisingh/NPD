@@ -810,3 +810,158 @@ tornado.websocket.WebSocketClosedError
 2025-08-29 12:48:13,203 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
 2025-08-29 12:48:13,219 | WARNING | Invalid columns blocked: ['PlannedQuarter'] | SQL: SELECT [BacklogAmount] FROM SalesPlanTable WHERE [Grade] = 'JSS' AND CAST([OrderFY] AS INT) = 2025 AND [PlannedQuarter] = 'Q2'
 2025-08-29 14:37:04,337 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-29 14:50:35,185 | WARNING | Error in _fix_cast_fy: module 're' has no attribute 'IGNORECASEl'
+2025-08-29 15:20:47,004 | INFO | Fixed column names:
+Original: SELECT [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [OrderQuarter], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [MMMMYY], [monthyear] FROM SalesPlanTable WHERE [LineNo] = 20000
+Fixed: SELECT [DocumentNo], [CustomerCode], [OrderDate], [SalespersonCode], [LineNo], [MPCODE], [DocumentDescription], [MFGMode], [Type], [Amount], [BacklogAmount], [Customer_Name], [Grade], [OrderQuarter], [OrderFY], [PlannedMonth], [MonthName], [document_Month_Number], [Order_Month_Number], [Item], [Planned_Fy_Flag], [Ord_Fy_Flag], [PlannedDeliveryMonthflag], [OrderMonthflag], [Quantity], [OutstandingQuantity], [QuantityInvoiced], [PlannedDeliveryDate], [No_of_Lines], [orderyear], [monthyear], [monthyear] FROM SalesPlanTable WHERE [LineNo] = 20000
+2025-08-29 15:28:28,788 | INFO | Fixed column names:
+Original: SELECT 
+    [DocumentNo], 
+    [CustomerCode], 
+    [OrderDate], 
+    [SalespersonCode], 
+    [LineNo], 
+    [MPCODE], 
+    [DocumentDescription], 
+    [MFGMode], 
+    [Type], 
+    [Amount], 
+    [BacklogAmount], 
+    [Customer_Name], 
+    [Grade], 
+    [OrderQuarter], 
+    [OrderFY], 
+    [PlannedMonth], 
+    [MonthName], 
+    [document_Month_Number], 
+    [Order_Month_Number], 
+    [Item], 
+    [Planned_Fy_Flag], 
+    [Ord_Fy_Flag], 
+    [PlannedDeliveryMonthflag], 
+    [OrderMonthflag], 
+    [Quantity], 
+    [OutstandingQuantity], 
+    [QuantityInvoiced], 
+    [PlannedDeliveryDate], 
+    [No_of_Lines], 
+    [orderyear], 
+    [MMMMYY], 
+    [monthyear]
+FROM 
+    SalesPlanTable
+WHERE 
+    [monthyear] = 'Mar-25'
+Fixed: SELECT 
+    [DocumentNo], 
+    [CustomerCode], 
+    [OrderDate], 
+    [SalespersonCode], 
+    [LineNo], 
+    [MPCODE], 
+    [DocumentDescription], 
+    [MFGMode], 
+    [Type], 
+    [Amount], 
+    [BacklogAmount], 
+    [Customer_Name], 
+    [Grade], 
+    [OrderQuarter], 
+    [OrderFY], 
+    [PlannedMonth], 
+    [MonthName], 
+    [document_Month_Number], 
+    [Order_Month_Number], 
+    [Item], 
+    [Planned_Fy_Flag], 
+    [Ord_Fy_Flag], 
+    [PlannedDeliveryMonthflag], 
+    [OrderMonthflag], 
+    [Quantity], 
+    [OutstandingQuantity], 
+    [QuantityInvoiced], 
+    [PlannedDeliveryDate], 
+    [No_of_Lines], 
+    [orderyear], 
+    [monthyear], 
+    [monthyear]
+FROM 
+    SalesPlanTable
+WHERE 
+    [monthyear] = 'Mar-25'
+2025-08-29 15:41:07,293 | INFO | Fixed column names:
+Original: SELECT 
+    [DocumentNo], 
+    [CustomerCode], 
+    [OrderDate], 
+    [SalespersonCode], 
+    [LineNo], 
+    [MPCODE], 
+    [DocumentDescription], 
+    [MFGMode], 
+    [Type], 
+    [Amount], 
+    [BacklogAmount], 
+    [Customer_Name], 
+    [Grade], 
+    [OrderQuarter], 
+    [OrderFY], 
+    [PlannedMonth], 
+    [MonthName], 
+    [document_Month_Number], 
+    [Order_Month_Number], 
+    [Item], 
+    [Planned_Fy_Flag], 
+    [Ord_Fy_Flag], 
+    [PlannedDeliveryMonthflag], 
+    [OrderMonthflag], 
+    [Quantity], 
+    [OutstandingQuantity], 
+    [QuantityInvoiced], 
+    [PlannedDeliveryDate], 
+    [No_of_Lines], 
+    [orderyear], 
+    [MMMMYY], 
+    [monthyear]
+FROM 
+    SalesPlanTable
+WHERE 
+    [monthyear] = 'Mar-25'
+Fixed: SELECT 
+    [DocumentNo], 
+    [CustomerCode], 
+    [OrderDate], 
+    [SalespersonCode], 
+    [LineNo], 
+    [MPCODE], 
+    [DocumentDescription], 
+    [MFGMode], 
+    [Type], 
+    [Amount], 
+    [BacklogAmount], 
+    [Customer_Name], 
+    [Grade], 
+    [OrderQuarter], 
+    [OrderFY], 
+    [PlannedMonth], 
+    [MonthName], 
+    [document_Month_Number], 
+    [Order_Month_Number], 
+    [Item], 
+    [Planned_Fy_Flag], 
+    [Ord_Fy_Flag], 
+    [PlannedDeliveryMonthflag], 
+    [OrderMonthflag], 
+    [Quantity], 
+    [OutstandingQuantity], 
+    [QuantityInvoiced], 
+    [PlannedDeliveryDate], 
+    [No_of_Lines], 
+    [orderyear], 
+    [monthyear], 
+    [monthyear]
+FROM 
+    SalesPlanTable
+WHERE 
+    [monthyear] = 'Mar-25'
+2025-08-29 16:07:28,538 | WARNING | Invalid columns blocked: ['Customer_Code'] | SQL: SELECT TOP 10 [Customer_Name], [Amount] FROM SalesPlanTable WHERE [Customer_Code] IS NOT NULL ORDER BY [Amount] DESC
