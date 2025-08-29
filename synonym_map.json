@@ -3,7 +3,7 @@
     "Amount": ["Sales", "Value", "amount","value", "sales amount", "sales value"],
 
     "OrderFY": [
-      "Fiscal Year", "FY", "fiscal", "fiscal year",
+      "Fiscal Year", "FY", "fiscal", "fiscal year","orderfy",
       "in FY", "for FY", "fy", "year", "fiscal year is", "fiscal year for", "fiscal year in", "year",
       "current fy", "previous fy", "is current", "current fiscal", "previous fiscal", "order fy", "order fiscal year", "order financial year"],
 
@@ -58,7 +58,7 @@
 
     "Type": ["Document Type", "type", "doc type","order type", "LOI", "Order"]
   },
-  
+
   "intent": {
     "compare": [
       "compare", "vs", "versus", "comparison", "side by side"

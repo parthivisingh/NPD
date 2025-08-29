@@ -43,7 +43,7 @@ def resolve_column(text: str) -> str:
     for col, synonyms in SYNONYM_MAP.get("columns", {}).items():
         for syn in synonyms:
             syn_clean = syn.lower().strip()
-            if re.search(rf"\b{re.escape(syn_clean)}\b", text) or syn_clean in text:
+            if re.search(rf"\b{re.escape(syn_clean)}\b", text, re.I) or syn_clean in text:
                 candidates.append((syn_clean, col))
 
     
