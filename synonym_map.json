@@ -5,11 +5,11 @@
     "OrderFY": [
       "Fiscal Year", "FY", "fiscal", "fiscal year",
       "in FY", "for FY", "fy", "year", "fiscal year is", "fiscal year for", "fiscal year in", "year",
-      "current fy", "previous fy", "is current", "current fiscal", "previous fiscal"],
+      "current fy", "previous fy", "is current", "current fiscal", "previous fiscal", "order fy", "order fiscal year", "order financial year"],
 
     "OrderDate": ["date", "Date", "order date", "Order Date"],
     "Customer_Name": [
-      "Customer", "Customer Name", "Party", "Client","clients",
+      "Customer", "Customer Name", "Party", "Client","clients", "cutomer name",
       "customer is", "customer name is", "for customer", "party is","customer"
     ],
     "BacklogAmount": [
@@ -18,11 +18,13 @@
       "Balance", "backlog"
     ],
     "Grade": ["grade", "Product Grade", "product grade", "grade is", "item grade"],
+
     "MFGMode": [
       "MFG", "Mode", "Manufacturing Mode",
       "mfg is", "production", "manufacturing mode",
       "manufacturing", "mfg mode", "MFGMode"
     ],
+
     "InvoicedQuantity": ["Invoiced", "invoiced qty", "qty invoiced", "invoiced qty is",
                          "invoiced quantity", "qty invoiced is", "invoiced quantity is"],
 
@@ -32,6 +34,7 @@
       "Balance Quantity", "Balance Qty",
       "outstanding qty", "balance", "outstanding quantity"
     ],
+
     "DocumentNo": ["No", "Document", "document no", "doc no"],
 
     "MonthName": ["Order Month", "month", "order month","by month",
@@ -41,19 +44,21 @@
     "monthyear": ["MY", "month year", "my","apr-25", "apr-24",
       "august 2024", "july 2025", "apr 25", "april 2025"],
 
-    "Item": ["Item", "Items", "Product"],
+    "Item": ["Item", "Items", "Product","item"],
 
     "MPCODE": ["Item", "Product", "MP", "mp code","material code","MP Code", "MPCODE",
       "material", "item code", "product code", "mp code is", "item is", "product is", "items","Items", "Products", "Materials", "materials"],
 
     "PlannedQuarter": ["Quarter", "Order Quarter", "Qtr", "quarter","Q1", "Q2", "Q3", "Q4",
-      "in Q1", "in quarter 1", "in Q2", "in quarter 2",
+      "in Q1", "in quarter 1", "in Q2", "in quarter 2", "planned quarter",
       "in Q3", "in quarter 3", "in Q4", "in quarter 4",
       "quarter is", "qtr is", "quarter1", "quarter2", "quarter3", "quarter4"],
 
-    "SalespersonCode": ["Salesperson", "sales", "sales person"],
+    "SalespersonCode": ["Salesperson", "sales", "sales person","sales code","salesperson code","sales person code"],
+
     "Type": ["Document Type", "type", "doc type","order type", "LOI", "Order"]
   },
+  
   "intent": {
     "compare": [
       "compare", "vs", "versus", "comparison", "side by side"

@@ -360,11 +360,19 @@ def detect_intent(q: str) -> str:
         return "list_rows"
     if "count of" in q or "number of" in q or "how many" in q:
         return "count"
-    # Enhanced total detection
     if ("total " in q or "sum of" in q or "show.*amount") and "by" not in q:
         return "total"
     if ("amount by" in q or "sales by" in q or "quantity by" in q or "value by" in q):
         return "aggregate"
+
+    # -------------------------------
+    # NEW: Column Lookup Intent
+    # -------------------------------
+    # Match: "amount", "customer name", "mfg", "fy", etc.
+    # But not if it's part of another intent
+    if re.match(r"^(show|get|list|what is|what are|tell me about|give me|display|fetch)?\s*[\w\s]+$", q):
+        return "column_lookup"
+
     return "unknown"
 
 # -------------------------------
@@ -816,59 +824,55 @@ def generate_sql(question: str, schema_text: str = None, conn=None) -> Optional[
     {where_sql}
     """
     # -------------------------------
-    # 7. Fallback: If user enters just a column name
+    # 7. Column Lookup: "amount", "customer name", "fy", etc.
     # -------------------------------
-    if intent == "unknown" and conn:
-        # Remove common prefixes
-        clean_text = re.sub(r"^(show|get|list|what is|what are|tell me about|give me|display|fetch)\s+", "", q_clean, flags=re.I).strip()
+    if intent == "column_lookup":
+        # Remove verbs
+        clean_text = re.sub(r"^(show|get|list|what is|what are|tell me about|give me|display|fetch|display)\s+", "", q_clean, flags=re.I).strip()
 
-        # Allow 1-2 words only
-        words = clean_text.split()
-        if len(words) == 0 or len(words) > 2:
-            pass  # Too long
-        else:
-            col = resolve_column(clean_text)
-            if col and has_column(conn, col):
-                # Determine if numeric
-                # Keywords that suggest numeric
-                numeric_keywords = {"amount", "quantity", "backlog", "value", "price", "cost", "sum", "total", "count", "number"}
-                is_numeric = any(k in col.lower() for k in numeric_keywords)
+        if not clean_text:
+            return None
 
-                # Refine using schema_text if available
-                if schema_text:
-                    numeric_types = r"(int|decimal|numeric|float|real|money|bigint|smallint)"
-                    found = False
-                    for line in schema_text.splitlines():
-                        line = line.strip()
-                        # Match column name exactly
-                        if re.search(rf"\b{re.escape(col)}\b", line, re.I):
-                            found = True
-                            if re.search(numeric_types, line, re.I):
-                                is_numeric = True
-                            else:
-                                is_numeric = False
-                            break
-                    # If column found but no type → assume text
-                    if found and not is_numeric:
+        col = resolve_column(clean_text)
+        if not col:
+            return None
+
+        if not has_column(conn, col):
+            return None
+
+        # Determine if numeric
+        numeric_keywords = {"amount", "quantity", "backlog", "value", "price", "cost", "sum", "total", "count", "number"}
+        is_numeric = any(k in col.lower() for k in numeric_keywords)
+
+        # Refine using schema_text if available
+        if schema_text:
+            numeric_types = r"(int|decimal|numeric|float|real|money|bigint|smallint)"
+            for line in schema_text.splitlines():
+                line = line.strip()
+                if re.search(rf"\b{re.escape(col)}\b", line, re.I):
+                    if re.search(numeric_types, line, re.I):
+                        is_numeric = True
+                    else:
                         is_numeric = False
+                    break
 
-                filters = extract_filters(q_orig)
-                where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+        filters = extract_filters(q_orig)
+        where_sql = " WHERE " + " AND ".join(filters) if filters else ""
 
-                if is_numeric:
-                    return f"""
-SELECT
-    SUM([{col}]) AS Total{col}
-FROM dbo.SalesPlanTable
-{where_sql}
-"""
-                else:
-                    return f"""
-SELECT DISTINCT
-    [{col}]
-FROM dbo.SalesPlanTable
-{where_sql}
-ORDER BY [{col}]
-"""
+        if is_numeric:
+            return f"""
+    SELECT
+        SUM([{col}]) AS Total{col}
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    """
+        else:
+            return f"""
+    SELECT DISTINCT
+        [{col}]
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    ORDER BY [{col}]
+    """
     # No template matched
     return None

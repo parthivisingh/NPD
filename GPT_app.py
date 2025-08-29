@@ -1,4 +1,4 @@
-# Streamlit app with two-panel layout
+# streamlit_app.py
 import os
 import pandas as pd
 import streamlit as st
@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 from GPT_agent2 import process_question
 import altair as alt
 
-# Load environment
+# Load environment variables
 load_dotenv()
 
 # ---------------- DB Connection ----------------
@@ -40,64 +40,62 @@ def get_engine():
 
 
 # ---------------- UI Setup ----------------
-st.set_page_config(page_title="QueryDB", layout="wide")
+st.set_page_config(page_title="Ask Your Database", layout="wide")
 
-# Initialize session state for history
+# Session state
 if "history" not in st.session_state:
     st.session_state["history"] = []
 if "user_question" not in st.session_state:
     st.session_state["user_question"] = ""
+if "results" not in st.session_state:
+    st.session_state["results"] = None
+if "debug_info" not in st.session_state:
+    st.session_state["debug_info"] = None
+if "chart_type" not in st.session_state:
+    st.session_state["chart_type"] = None
 
-# Two panels
-left_col, right_col = st.columns([1, 3])
+# ---------------- Sidebar (Query History) ----------------
+st.sidebar.header("Query History")
 
-# ---------------- Left Panel ----------------
-with left_col:
-    st.markdown("<div style='background-color:#f0f0f0; padding:15px; border-radius:8px;'>", unsafe_allow_html=True)
-    st.subheader("Ask your database")
+if st.session_state["history"]:
+    for i, q in enumerate(reversed(st.session_state["history"])):
+        if st.sidebar.button(q, key=f"hist_{i}"):
+            # Load query into text box and clear results
+            st.session_state["user_question"] = q
+            st.session_state["results"] = None
+            st.session_state["debug_info"] = None
+            st.session_state["chart_type"] = None
+            st.rerun()
+else:
+    st.sidebar.caption("No queries yet.")
 
-    user_question = st.text_area(
-        "Query:", 
-        value=st.session_state["user_question"], 
-        key="user_question_input"
-    )
+# ---------------- Main Page ----------------
+st.title("Ask your database")
 
-    run_btn = st.button("Run Query")
+# Input field
+user_question = st.text_area(
+    "Enter your query:", 
+    value=st.session_state["user_question"], 
+    key="user_question_input"
+)
 
-    st.markdown("### Query History (session only)")
-    if st.session_state["history"]:
-        for i, q in enumerate(reversed(st.session_state["history"])):
-            if st.button(q, key=f"hist_{i}"):
-                st.session_state["user_question"] = q
-                st.rerun()
-    else:
-        st.caption("No queries yet.")
+# Ask button
+ask_btn = st.button(
+    "Ask", 
+    type="primary" if st.session_state["user_question"] else "secondary"
+)
 
-    st.markdown("</div>", unsafe_allow_html=True)
+# ---------------- Handle Query Execution ----------------
+def render_result(df: pd.DataFrame, chart_type: str):
+    """Render charts and tables based on query result."""
+    if df is None or df.empty:
+        st.warning("⚠️ No results to display.")
+        return
 
-# ---------------- Right Panel ----------------
-with right_col:
-    st.markdown("<div style='background-color:#1c1c1c; color:white; padding:15px; border-radius:8px;'>", unsafe_allow_html=True)
-    st.subheader("Results")
-
-    def render_result(df: pd.DataFrame, chart_type: str):
-        if df is None or df.empty:
-            st.warning("⚠️ No results to display.")
-            return
-
-        # Case 1: Single cell → metric
-        if df.shape == (1, 1):
-            colname = df.columns[0]
-            value = df.iloc[0, 0]
-            st.metric(label=colname, value=value)
-            return
-
-        # Case 2: Show table
-        st.dataframe(df, use_container_width=True, height=400)
-
-        # Optional chart
+    # Optional Graph Output
+    if chart_type and df.shape[1] >= 2:
         try:
-            if chart_type == "bar" and df.shape[1] >= 2:
+            if chart_type == "bar":
                 x_col, y_col = df.columns[0], df.columns[1]
                 chart = alt.Chart(df).mark_bar().encode(
                     x=alt.X(x_col, sort='-y'),
@@ -116,7 +114,7 @@ with right_col:
                 )
                 st.altair_chart(chart, use_container_width=True)
 
-            elif chart_type == "line" and df.shape[1] >= 2:
+            elif chart_type == "line":
                 x_col, y_col = df.columns[0], df.columns[1]
                 chart = alt.Chart(df).mark_line(point=True).encode(
                     x=x_col,
@@ -124,50 +122,55 @@ with right_col:
                     tooltip=list(df.columns)
                 )
                 st.altair_chart(chart, use_container_width=True)
+
         except Exception as e:
             st.error(f"Chart rendering failed: {e}")
 
-    # Run Query Handling
-    if run_btn:
-        if not user_question.strip():
-            st.warning("Please enter a question first.")
-        else:
-            try:
-                conn = pyodbc.connect(build_conn_str())
-                sql_query, debug_info = process_question(user_question, conn)
+    # Always show Table Output
+    st.subheader("Tabular Output")
+    st.dataframe(df, use_container_width=True, height=400)
 
-                # Save to history
-                if user_question not in st.session_state["history"]:
-                    st.session_state["history"].append(user_question)
-                st.session_state["user_question"] = user_question
 
-                # Handle results
-                result = debug_info.get("result")
-                df = None
-                if isinstance(result, pd.DataFrame):
-                    df = result
-                elif isinstance(result, list) and len(result) > 0:
-                    df = pd.DataFrame(result)
+if ask_btn:
+    if not user_question.strip():
+        st.warning("Please enter a question first.")
+    else:
+        try:
+            conn = pyodbc.connect(build_conn_str())
+            sql_query, debug_info = process_question(user_question, conn)
 
-                chart_type = debug_info.get("chart_type")
-                if df is not None:
-                    render_result(df, chart_type)
-                else:
-                    st.warning("⚠️ No results returned from query.")
+            # Save query to history
+            if user_question not in st.session_state["history"]:
+                st.session_state["history"].append(user_question)
 
-                # Debug info
-                with st.expander("🛠 Debug Info", expanded=True):
-                    st.json(debug_info)
+            # Store results in session
+            result = debug_info.get("result")
+            df = None
+            if isinstance(result, pd.DataFrame):
+                df = result
+            elif isinstance(result, list) and len(result) > 0:
+                df = pd.DataFrame(result)
 
-                # Show SQL
-                final_sql = debug_info.get("final_sql") or sql_query
-                if final_sql:
-                    st.subheader("Generated SQL")
-                    st.code(final_sql, language="sql")
-                else:
-                    st.error("❌ No SQL was generated.")
+            st.session_state["results"] = df
+            st.session_state["debug_info"] = debug_info
+            st.session_state["chart_type"] = debug_info.get("chart_type")
 
-            except Exception as e:
-                st.error(f"Error: {e}")
+        except Exception as e:
+            st.error(f"Error: {e}")
 
-    st.markdown("</div>", unsafe_allow_html=True)
+# ---------------- Display Results ----------------
+if st.session_state["results"] is not None:
+    st.header("Results")
+    render_result(st.session_state["results"], st.session_state["chart_type"])
+
+    with st.expander("🛠 Debug Output", expanded=False):
+        st.json(st.session_state["debug_info"])
+
+    final_sql = (
+        st.session_state["debug_info"].get("final_sql")
+        if st.session_state["debug_info"]
+        else None
+    )
+    if final_sql:
+        st.subheader("Generated SQL")
+        st.code(final_sql, language="sql")
