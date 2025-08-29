@@ -45,6 +45,8 @@ def resolve_column(text: str) -> str:
             syn_clean = syn.lower().strip()
             if re.search(rf"\b{re.escape(syn_clean)}\b", text, re.I) or syn_clean in text:
                 candidates.append((syn_clean, col))
+            elif syn_clean in text:
+                candidates.append((syn_clean, col))
 
     
     # Sort by synonym length (longest first)
@@ -345,13 +347,23 @@ def extract_filters(q: str) -> List[str]:
     return filters
 # -------------------------------
 # Intent Detection
-# -------------------------------
-
+# -------------------------------   
 def detect_intent(q: str) -> str:
     q = q.lower().strip()
-    
+
     if any(word in q for word in ["compare", "vs", "versus"]):
         return "compare"
+
+    # -------------------------------
+    # NEW: Column Lookup Intent — FIRST
+    # -------------------------------
+    # Only if it's a single column name, optionally prefixed
+    words = q.split()
+    if len(words) <= 2:
+        col = resolve_column(q)
+        if col:
+            return "column_lookup"
+
     if any(word in q for word in ["growth", "increase", "delta", "change"]):
         return "growth"
     if "top" in q or any(word in q for word in ["best", "highest", "largest"]):
@@ -360,19 +372,18 @@ def detect_intent(q: str) -> str:
         return "list_rows"
     if "count of" in q or "number of" in q or "how many" in q:
         return "count"
+
+    # -------------------------------
+    # Total Intent — AFTER column_lookup
+    # -------------------------------
     if (re.search(r"\b(total|sum|show)\b", q) and 
         re.search(r"\b(amount|sales|quantity|value|backlog)\b", q)) and "by" not in q:
         return "total"
-    # if ("total " in q or "sum of" in q or "show.*amount") and "by" not in q:
-    #     return "total"
+
     if ("amount by" in q or "sales by" in q or "quantity by" in q or "value by" in q):
         return "aggregate"
-    # NEW: Column Lookup Intent
-    if re.match(r"^(show|get|list|what is|what are|tell me about|give me|display|fetch)?\s*[\w\s]+$", q):
-        return "column_lookup"
 
     return "unknown"
-
 # -------------------------------
 # Entity Extraction 
 # VER MOD 3.2 PERFECTED "by month and type", "by month, type", "by month by type", "by FY for previous"
@@ -444,21 +455,31 @@ def generate_sql(question: str, schema_text: str = None, conn=None) -> Optional[
         if not has_column(conn, col):
             return None
 
-        # Determine if numeric
-        numeric_keywords = {"amount", "quantity", "backlog", "value", "price", "cost", "sum", "total", "count", "number"}
-        is_numeric = any(k in col.lower() for k in numeric_keywords)
+        # ✅ MUST have schema_text to determine type
+        if not schema_text:
+            print(f"[ERROR] schema_text is required for column_lookup but not provided")
+            return None
 
-        # Refine using schema_text if available
-        if schema_text:
-            numeric_types = r"(int|decimal|numeric|float|real|money|bigint|smallint)"
-            for line in schema_text.splitlines():
-                line = line.strip()
-                if re.search(rf"\b{re.escape(col)}\b", line, re.I):
-                    if re.search(numeric_types, line, re.I):
-                        is_numeric = True
-                    else:
-                        is_numeric = False
-                    break
+        # ✅ Determine type from schema_text
+        numeric_types = r"\b(int|decimal|numeric|float|real|money|bigint|smallint)\b"
+        date_types = r"\b(date|datetime|smalldatetime|datetime2)\b"
+
+        is_numeric = False
+        is_date = False
+
+        for line in schema_text.splitlines():
+            line = line.strip()
+            # Match column definition line
+            if re.search(rf"\b{re.escape(col)}\b", line, re.I):
+                if re.search(numeric_types, line, re.I):
+                    is_numeric = True
+                elif re.search(date_types, line, re.I):
+                    is_date = True
+                break
+        else:
+            # Column not found in schema_text
+            print(f"[ERROR] Column '{col}' not found in schema_text")
+            return None
 
         filters = extract_filters(q_orig)
         where_sql = " WHERE " + " AND ".join(filters) if filters else ""
@@ -470,7 +491,7 @@ def generate_sql(question: str, schema_text: str = None, conn=None) -> Optional[
     FROM dbo.SalesPlanTable
     {where_sql}
     """
-        else:
+        elif is_date:
             return f"""
     SELECT DISTINCT
         [{col}]
@@ -478,7 +499,14 @@ def generate_sql(question: str, schema_text: str = None, conn=None) -> Optional[
     {where_sql}
     ORDER BY [{col}]
     """
-    
+        else:
+            return f"""
+    SELECT DISTINCT
+        [{col}]
+    FROM dbo.SalesPlanTable
+    {where_sql}
+    ORDER BY [{col}]
+    """    
     if intent == "compare":
     # 1. Compare for Col = A and B
         match = re.search(
