@@ -442,44 +442,29 @@ def generate_sql(question: str, schema_text: str = None, conn=None) -> Optional[
     # 7. Column Lookup: "amount", "customer name", "fy", etc.
     # -------------------------------
     if intent == "column_lookup":
-        # Remove verbs
         clean_text = re.sub(r"^(show|get|list|what is|what are|tell me about|give me|display|fetch|display)\s+", "", q_clean, flags=re.I).strip()
-
         if not clean_text:
             return None
 
         col = resolve_column(clean_text)
         if not col:
             return None
-
         if not has_column(conn, col):
             return None
 
-        # ✅ MUST have schema_text to determine type
+        # MUST have schema_text
         if not schema_text:
-            print(f"[ERROR] schema_text is required for column_lookup but not provided")
             return None
 
-        # ✅ Determine type from schema_text
-        numeric_types = r"\b(int|decimal|numeric|float|real|money|bigint|smallint)\b"
-        date_types = r"\b(date|datetime|smalldatetime|datetime2)\b"
-
-        is_numeric = False
-        is_date = False
-
-        for line in schema_text.splitlines():
-            line = line.strip()
-            # Match column definition line
-            if re.search(rf"\b{re.escape(col)}\b", line, re.I):
-                if re.search(numeric_types, line, re.I):
-                    is_numeric = True
-                elif re.search(date_types, line, re.I):
-                    is_date = True
-                break
-        else:
-            # Column not found in schema_text
-            print(f"[ERROR] Column '{col}' not found in schema_text")
+        # Parse schema_text: look for "Column: Type, Type: varchar"
+        pattern = rf"Column:\s*{re.escape(col)}\s*,\s*Type:\s*(\w+)"
+        match = re.search(pattern, schema_text, re.I)
+        if not match:
             return None
+
+        data_type = match.group(1).lower()
+        numeric_types = {"int", "decimal", "numeric", "float", "real", "money", "bigint", "smallint"}
+        is_numeric = data_type in numeric_types
 
         filters = extract_filters(q_orig)
         where_sql = " WHERE " + " AND ".join(filters) if filters else ""
@@ -491,14 +476,6 @@ def generate_sql(question: str, schema_text: str = None, conn=None) -> Optional[
     FROM dbo.SalesPlanTable
     {where_sql}
     """
-        elif is_date:
-            return f"""
-    SELECT DISTINCT
-        [{col}]
-    FROM dbo.SalesPlanTable
-    {where_sql}
-    ORDER BY [{col}]
-    """
         else:
             return f"""
     SELECT DISTINCT
@@ -506,7 +483,7 @@ def generate_sql(question: str, schema_text: str = None, conn=None) -> Optional[
     FROM dbo.SalesPlanTable
     {where_sql}
     ORDER BY [{col}]
-    """    
+    """  
     if intent == "compare":
     # 1. Compare for Col = A and B
         match = re.search(

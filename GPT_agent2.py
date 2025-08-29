@@ -64,21 +64,15 @@ def fetch_schema_text(conn, include_schemas=("dbo",), limit_tables=50) -> str:
     """, include_schemas)
     rows = cur.fetchall()
 
-    from collections import defaultdict
-    tables = defaultdict(list)
-    for sch, tbl, col, dtype in rows:
-        tables[(sch, tbl)].append((col, dtype))
-
-    items = list(tables.items())[:limit_tables]
     lines = []
-    for (sch, tbl), cols in items:
-        col_str = ", ".join(f"{c} {t}" for c, t in cols[:80])
-        lines.append(f"{sch}.{tbl}({col_str})")
+    for sch, tbl, col, dtype in rows:
+        lines.append(f"Column: {col}, Type: {dtype}")
 
     # Add hint for LLM
     lines.append("")
     lines.append("-- Note: OrderFY is VARCHAR(10) containing year like '2023'. Use CAST(OrderFY AS INT) to treat as number.")
     lines.append("-- Note: [monthyear] = 'Apr-24', 'May-25' — use for month-year filtering")
+
     return "\n".join(lines)
 
 # ---------------- DYNAMIC SYNONYM FILTERING ----------------
@@ -116,6 +110,7 @@ You are a precise SQL assistant for Microsoft SQL Server. Generate ONLY a SELECT
 - Return ONLY the SQL query. No explanations.
 - Use SELECT to answer the question.
 - Use ONLY column names from the schema. Do NOT invent or modify column names.
+- Table name is SalesPlanTable.
 - Wrap column names in [ ] if they have spaces or are keywords.
 - For "previous month", use [monthyear] = 'Jul-25' (replace with actual value).
 - Do NOT use 'Previous Month' as a string value.

@@ -95,22 +95,108 @@ ask_btn = st.button(
     type="primary" if user_question.strip() else "secondary"
 )
 
-# ---------------- Result Renderer ----------------
+# # ---------------- Result Renderer ----------------
+# def render_result(df: pd.DataFrame, chart_type: str):
+#     """Render charts and tables based on query result."""
+#     if df is None or df.empty:
+#         st.warning("⚠️ No data returned from the query.")
+#         return
+    
+#      # Always show table
+#     #st.dataframe(df, use_container_width=True, height=400)
+    
+#     num_cols = df.shape[1]
+#     num_rows = df.shape[0]
+
+#     if num_cols == 1:
+#         #st.write(f"**{num_rows} value(s) retrieved:**")
+#         # Convert single column to list and display as plain text, one per line
+#         col_name = df.columns[0]
+#         num_rows = len(df)
+#         st.subheader(col_name)
+#         values = df.iloc[:, 0].dropna().astype(str).tolist()
+#         for val in values:
+#             st.text(val)  # Simple, unformatted text
+
+#     elif num_cols <= 10:
+#         st.write(f"Showing {num_rows} row(s) with {num_cols} columns.")
+#         st.dataframe(df, use_container_width=True, height=400)
+
+#     else:  # More than 10 columns
+#         st.write(f"Showing wide result with **{num_cols} columns** and {num_rows} rows (scroll horizontally):")
+#         st.dataframe(df, use_container_width=True, height=400)
+    
+#     # Optional Chart
+#     if chart_type and df.shape[1] >= 2:
+#         try:
+#             x_col, y_col = df.columns[0], df.columns[1]
+
+#             if chart_type == "bar":
+#                 chart = alt.Chart(df).mark_bar().encode(
+#                     x=alt.X(x_col, sort='-y'),
+#                     y=y_col,
+#                     tooltip=list(df.columns)
+#                 )
+#                 st.altair_chart(chart, use_container_width=True)
+
+#             elif chart_type == "stacked_bar" and df.shape[1] >= 3:
+#                 color_col = df.columns[2]
+#                 chart = alt.Chart(df).mark_bar().encode(
+#                     x=x_col,
+#                     y=y_col,
+#                     color=color_col,
+#                     tooltip=list(df.columns)
+#                 )
+#                 st.altair_chart(chart, use_container_width=True)
+
+#             elif chart_type == "line":
+#                 chart = alt.Chart(df).mark_line(point=True).encode(
+#                     x=x_col,
+#                     y=y_col,
+#                     tooltip=list(df.columns)
+#                 )
+#                 st.altair_chart(chart, use_container_width=True)
+
+#         except Exception as e:
+#             st.error(f"📊 Chart rendering failed: {e}")
+
 def render_result(df: pd.DataFrame, chart_type: str):
-    """Render charts and tables based on query result."""
+    """Render charts and data output dynamically based on column count."""
     if df is None or df.empty:
         st.warning("⚠️ No data returned from the query.")
         return
+
+
+    num_cols = df.shape[1]
+    num_rows = df.shape[0]
+
+    if num_cols == 1:
+        col_name = df.columns[0]
+        num_rows = len(df)
+
+        st.subheader(col_name)
+
+        if num_rows > 10:
+            st.dataframe(df, use_container_width=True, height=400)
+        else:
+            # Keep it simple: plain text, one per line
+            values = df.iloc[:, 0].dropna().astype(str).tolist()
+            for val in values:
+                st.text(val)
+
+    elif num_cols <= 10:
+        st.write(f"Showing {num_rows} row(s) with {num_cols} columns.")
+        st.dataframe(df, use_container_width=True, height=400)
+
+    else:  # More than 10 columns
+        st.write(f"Showing wide result with **{num_cols} columns** and {num_rows} rows (scroll horizontally):")
+        st.dataframe(df, use_container_width=True, height=400)
     
-     # Always show table
-    st.dataframe(df, use_container_width=True, height=400)
-
-    # Optional Chart
-    if chart_type and df.shape[1] >= 2:
+    # Show chart if applicable
+    if chart_type and len(df) > 0:
         try:
-            x_col, y_col = df.columns[0], df.columns[1]
-
-            if chart_type == "bar":
+            if chart_type == "bar" and df.shape[1] >= 2:
+                x_col, y_col = df.columns[0], df.columns[1]
                 chart = alt.Chart(df).mark_bar().encode(
                     x=alt.X(x_col, sort='-y'),
                     y=y_col,
@@ -119,7 +205,7 @@ def render_result(df: pd.DataFrame, chart_type: str):
                 st.altair_chart(chart, use_container_width=True)
 
             elif chart_type == "stacked_bar" and df.shape[1] >= 3:
-                color_col = df.columns[2]
+                x_col, color_col, y_col = df.columns[0], df.columns[1], df.columns[2]
                 chart = alt.Chart(df).mark_bar().encode(
                     x=x_col,
                     y=y_col,
@@ -128,7 +214,8 @@ def render_result(df: pd.DataFrame, chart_type: str):
                 )
                 st.altair_chart(chart, use_container_width=True)
 
-            elif chart_type == "line":
+            elif chart_type == "line" and df.shape[1] >= 2:
+                x_col, y_col = df.columns[0], df.columns[1]
                 chart = alt.Chart(df).mark_line(point=True).encode(
                     x=x_col,
                     y=y_col,
@@ -138,8 +225,6 @@ def render_result(df: pd.DataFrame, chart_type: str):
 
         except Exception as e:
             st.error(f"📊 Chart rendering failed: {e}")
-
-
 
 
 # ---------------- Handle Query Execution ----------------
@@ -159,7 +244,6 @@ if ask_btn:
                 # Default to empty DataFrame
                 df = pd.DataFrame()
 
-                #优先使用 agent 直接返回的结果
                 if debug_info.get("result") is not None:
                     if isinstance(debug_info["result"], pd.DataFrame):
                         df = debug_info["result"]
@@ -184,7 +268,7 @@ if ask_btn:
 
 # ---------------- Display Results ----------------
 if st.session_state["results"] is not None:
-    st.header("Results")
+    #st.header("Results")
     render_result(st.session_state["results"], st.session_state["chart_type"])
 
     with st.expander("🛠 Debug Output", expanded=False):
