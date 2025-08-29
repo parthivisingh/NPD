@@ -82,15 +82,13 @@ else:
 
 
 # ---------------- Main Page ----------------
-st.title("💬 Ask Your Database")
+st.title("Ask Your Database")
 
 # Text input synchronized with session state
 user_question = st.text_area(
     "Enter your natural language question:",
-    value=st.session_state["user_question"],
-    key="user_question"
+    key="user_question"  # Streamlit auto-syncs with st.session_state["user_question"]
 )
-
 # Ask Button
 ask_btn = st.button(
     "Ask",
@@ -103,6 +101,9 @@ def render_result(df: pd.DataFrame, chart_type: str):
     if df is None or df.empty:
         st.warning("⚠️ No data returned from the query.")
         return
+    
+     # Always show table
+    st.dataframe(df, use_container_width=True, height=400)
 
     # Optional Chart
     if chart_type and df.shape[1] >= 2:
@@ -138,9 +139,7 @@ def render_result(df: pd.DataFrame, chart_type: str):
         except Exception as e:
             st.error(f"📊 Chart rendering failed: {e}")
 
-    # Always show table
-    st.subheader("📋 Tabular Output")
-    st.dataframe(df, use_container_width=True, height=400)
+
 
 
 # ---------------- Handle Query Execution ----------------
@@ -185,7 +184,7 @@ if ask_btn:
 
 # ---------------- Display Results ----------------
 if st.session_state["results"] is not None:
-    st.header("✅ Results")
+    st.header("Results")
     render_result(st.session_state["results"], st.session_state["chart_type"])
 
     with st.expander("🛠 Debug Output", expanded=False):
