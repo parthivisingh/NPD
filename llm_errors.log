@@ -965,3 +965,11 @@ FROM
 WHERE 
     [monthyear] = 'Mar-25'
 2025-08-29 16:07:28,538 | WARNING | Invalid columns blocked: ['Customer_Code'] | SQL: SELECT TOP 10 [Customer_Name], [Amount] FROM SalesPlanTable WHERE [Customer_Code] IS NOT NULL ORDER BY [Amount] DESC
+2025-08-29 17:15:05,025 | WARNING | Invalid columns blocked: ['PlannedQuarter'] | SQL: 
+        SELECT
+            [OrderFY], SUM([PlannedQuarter]) AS TotalPlannedQuarter
+        FROM dbo.SalesPlanTable
+         WHERE OrderFY = '2024-25' AND OrderQuarter = 'Q1' AND OrderFY = '2024-25'
+        GROUP BY [OrderFY]
+        ORDER BY TotalPlannedQuarter DESC
+        
